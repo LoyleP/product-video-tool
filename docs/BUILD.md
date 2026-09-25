@@ -521,7 +521,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 
 ## 15. Status
 
-- [ ] Phase 0
+- [ ] Phase 0 (in progress: code done on `phase-0-foundation`; waiting on Vercel import and owner acceptance)
 - [ ] Phase 1
 - [ ] Phase 2
 - [ ] Phase 3
