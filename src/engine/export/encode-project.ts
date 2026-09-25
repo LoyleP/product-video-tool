@@ -3,6 +3,7 @@ import type { Project } from "@/schema/project";
 import { MediaFrameProvider } from "../decode/media-frame-provider";
 import type { Size } from "../geometry";
 import { renderFrame } from "../render-frame";
+import { loadFontsHere, projectFontFamilies } from "../text/fonts";
 import { frameCount, frameTime, microsToSeconds, type Micros } from "../time";
 import { activeClips } from "../timeline";
 import { AacTrackEncoder, measureAacDelay, type AacConfig } from "./aac-encoder";
@@ -61,6 +62,7 @@ export async function encodeProject(
   const frames = new MediaFrameProvider();
   let aac: AacTrackEncoder | null = null;
   try {
+    await loadFontsHere(projectFontFamilies(project.textTracks));
     if (aacConfig && audioSource) aac = new AacTrackEncoder(aacConfig, audioSource, await measureAacDelay(aacConfig));
     for (const asset of Object.values(project.assets)) {
       const file = req.files[asset.id];

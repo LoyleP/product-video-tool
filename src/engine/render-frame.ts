@@ -6,32 +6,63 @@ import {
   type Camera,
   type CameraTransform,
 } from "./camera";
+import { coverRect, deviceById } from "./devices";
 import type { FrameProvider, RenderTarget } from "./frame-provider";
 import { mediaRect, type Rect } from "./geometry";
 import { drawBackground } from "./layers/background";
-import { drawMedia } from "./layers/media";
+import { drawGestures } from "./layers/gestures";
+import { drawMedia, type MediaPlacement, type Radii } from "./layers/media";
+import { drawText } from "./layers/text";
 import type { Micros } from "./time";
 import { activeClips } from "./timeline";
 
 export interface FrameLayout {
   camera: Camera;
   transform: CameraTransform;
-  /** Media rect of the topmost-priority visible clip, which the camera frames. */
+  /** Screen rect of the first visible clip: what the camera frames and gestures are placed in. */
   primaryRect: Rect | null;
-  media: { assetId: string; sourceTime: Micros; rect: Rect }[];
+  media: MediaPlacement[];
+}
+
+function placeMedia(project: Project, assetId: string, sourceTime: Micros, width: number, height: number): MediaPlacement {
+  const { style, canvas } = project;
+  const aspect = width / height;
+  const def = style.device ? deviceById(style.device.frameId) : null;
+  if (def && style.device) {
+    const geometry = def.geometry(aspect);
+    const rect = mediaRect(canvas, { width: geometry.width, height: geometry.height }, style.padding);
+    const k = rect.w / geometry.width;
+    const screen = {
+      x: rect.x + geometry.screen.x * k,
+      y: rect.y + geometry.screen.y * k,
+      w: geometry.screen.w * k,
+      h: geometry.screen.h * k,
+    };
+    const color = def.colors.find((c) => c.id === style.device!.color) ?? def.colors[0]!;
+    return {
+      assetId,
+      sourceTime,
+      screen,
+      radii: geometry.screenRadii.map((r) => r * k) as Radii,
+      draw: coverRect(screen, aspect),
+      device: { def, geometry, color, rect, k },
+    };
+  }
+  const screen = mediaRect(canvas, { width, height }, style.padding);
+  const r = Math.min(style.cornerRadius, screen.w / 2, screen.h / 2);
+  return { assetId, sourceTime, screen, radii: [r, r, r, r], draw: screen, device: null };
 }
 
 /** Where everything sits at time `t`, in canvas units. Pure; shared by rendering and editor hit-testing. */
 export function layoutAt(project: Project, t: Micros): FrameLayout {
   const camera = resolveCamera(project.zooms, t);
-  const media: FrameLayout["media"] = [];
+  const media: MediaPlacement[] = [];
   for (const { clip, sourceTime } of activeClips(project, t)) {
     const asset = project.assets[clip.assetId];
     if (!asset?.width || !asset.height) continue;
-    const rect = mediaRect(project.canvas, { width: asset.width, height: asset.height }, project.style.padding);
-    media.push({ assetId: asset.id, sourceTime, rect });
+    media.push(placeMedia(project, asset.id, sourceTime, asset.width, asset.height));
   }
-  const primaryRect = media[0]?.rect ?? null;
+  const primaryRect = media[0]?.screen ?? null;
   const transform = primaryRect ? cameraTransform(project.canvas, primaryRect, camera) : IDENTITY_TRANSFORM;
   return { camera, transform, primaryRect, media };
 }
@@ -51,13 +82,23 @@ export function renderFrame(target: RenderTarget, project: Project, t: Micros, f
   ctx.clearRect(0, 0, target.width, target.height);
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
+  // 1. Background.
   const blur = project.style.zoomBackgroundBlur * layout.camera.amount;
   drawBackground(ctx, project.style.background, project.canvas, blur, scale);
 
-  // Camera applies to everything above the background (BUILD.md 7.2).
+  // 2 to 6. Camera over shadow, media, device frame and gestures.
+  ctx.save();
   ctx.transform(transform.scale, 0, 0, transform.scale, transform.tx, transform.ty);
-  for (const { assetId, sourceTime, rect } of layout.media) {
-    drawMedia(ctx, frames.getFrame(assetId, sourceTime), rect, project.style, scale * transform.scale);
+  const pixelScale = scale * transform.scale;
+  for (const placement of layout.media) {
+    drawMedia(ctx, frames.getFrame(placement.assetId, placement.sourceTime), placement, project.style, pixelScale);
+  }
+  if (layout.primaryRect) drawGestures(ctx, project.gestures, t, layout.primaryRect, pixelScale);
+  ctx.restore();
+
+  // 7. Text in canvas space, unaffected by zoom.
+  for (const track of project.textTracks) {
+    for (const layer of track.layers) drawText(ctx, layer, t, project.canvas);
   }
 
   ctx.restore();
