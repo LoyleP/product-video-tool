@@ -1,7 +1,8 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink, type VideoSample } from "mediabunny";
 import type { DrawableFrame, RenderContext } from "../frame-provider";
-import { microsToSeconds, secondsToMicros, type Micros } from "../time";
+import { microsToSeconds, secondsToMicrosCeil, type Micros } from "../time";
 import { FrameCache } from "./frame-cache";
+import { pickVideoTrack } from "./probe";
 
 class CachedFrame implements DrawableFrame {
   constructor(private readonly sample: VideoSample) {}
@@ -53,12 +54,13 @@ export class VideoFrameSource {
     this.cache = new FrameCache(cacheSize);
   }
 
-  static async open(blob: Blob, cacheSize = 30): Promise<VideoFrameSource> {
+  static async open(blob: Blob, trackIndex?: number, cacheSize = 30): Promise<VideoFrameSource> {
     const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
     try {
-      const track = await input.getPrimaryVideoTrack();
+      const track = await pickVideoTrack(input, trackIndex);
       if (!track) throw new Error("The video has no video track.");
-      const first = secondsToMicros(await track.getFirstTimestamp());
+      // Round up: rounding down could land a hair before the first frame, where no sample exists.
+      const first = secondsToMicrosCeil(await track.getFirstTimestamp());
       return new VideoFrameSource(input, new VideoSampleSink(track), first, cacheSize);
     } catch (error) {
       input.dispose();
