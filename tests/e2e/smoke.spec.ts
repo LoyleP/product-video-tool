@@ -7,10 +7,10 @@ test("landing page links to the editor", async ({ page }) => {
   await expect(page).toHaveURL(/\/editor$/);
 });
 
-test("editor shows the capabilities debug panel on desktop", async ({ page }) => {
+test("import screen shows the capabilities debug panel", async ({ page }) => {
   await page.goto("/editor");
   const panel = page.getByTestId("capabilities-panel");
-  await expect(panel).toBeVisible();
+  await panel.getByText("Debug: capabilities").click();
   await expect(panel.locator('[data-capability="videoEncoder"] dd')).toHaveText("yes");
   await expect(panel.locator('[data-capability="h264_1080p"] dd')).not.toHaveText("…");
 });
@@ -22,8 +22,8 @@ test("health endpoint responds", async ({ request }) => {
 });
 
 test.describe("on a phone", () => {
-  const { defaultBrowserType: _, ...iPhone } = devices["iPhone 15"];
-  test.use(iPhone);
+  const { viewport, deviceScaleFactor, isMobile, hasTouch, userAgent } = devices["iPhone 15"];
+  test.use({ viewport, deviceScaleFactor, isMobile, hasTouch, userAgent });
 
   test("editor asks for a desktop browser", async ({ page }) => {
     await page.goto("/editor");

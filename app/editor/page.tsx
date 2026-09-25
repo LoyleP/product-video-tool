@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
-import { EditorEntry } from "@/editor/editor-entry";
+import { DesktopGate } from "@/editor/desktop-gate";
+import { ImportScreen } from "@/editor/import/import-screen";
 
-export const metadata: Metadata = { title: "Editor" };
+export const metadata: Metadata = { title: "New project" };
 
-export default function EditorPage() {
-  return <EditorEntry />;
+export default function NewProjectPage() {
+  return (
+    <DesktopGate>
+      <ImportScreen />
+    </DesktopGate>
+  );
 }
