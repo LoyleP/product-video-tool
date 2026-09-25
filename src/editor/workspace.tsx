@@ -1,22 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PlusIcon, Redo2Icon, Undo2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/schema/project";
 import { StorageError } from "@/storage/errors";
 import { ProjectMigrationError } from "@/storage/migrations";
 import { loadProject } from "@/storage/projects";
+import { appendVideo } from "@/store/edits";
+import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
 import { BackgroundsRail } from "./backgrounds-rail";
+import { ACCEPT_ATTRIBUTE, ImportError, importAsset } from "./import/import-video";
+import { ClipPanel } from "./inspector/clip-panel";
 import { ExportPanel } from "./inspector/export-panel";
 import { StylePanel } from "./inspector/style-panel";
-import type { Player } from "./preview/player";
+import { ZoomPanel } from "./inspector/zoom-panel";
 import { PreviewCanvas } from "./preview/preview-canvas";
 import { usePlayer } from "./preview/use-player";
+import { Timeline } from "./timeline/timeline";
 import { Transport } from "./timeline/transport";
 import { useAutosave } from "./use-autosave";
+import { useEditorShortcuts } from "./use-editor-shortcuts";
 
 export function EditorWorkspace({ projectId }: { projectId: string }) {
   const project = useProjectStore((s) => s.project);
@@ -52,56 +59,72 @@ export function EditorWorkspace({ projectId }: { projectId: string }) {
   return <Workspace project={loaded} />;
 }
 
-const isTypingTarget = (target: EventTarget | null) =>
-  target instanceof HTMLElement &&
-  (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName));
-
-/** Space toggles playback unless focus is on a control that uses Space itself. */
-function usePlaybackShortcuts(player: Player | null) {
-  useEffect(() => {
-    if (!player) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || e.repeat || e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
-      e.preventDefault();
-      player.toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [player]);
-}
-
-type InspectorTab = "style" | "export";
+type InspectorTab = "style" | "clip" | "zoom" | "export";
+const TABS: InspectorTab[] = ["style", "clip", "zoom", "export"];
 
 function Workspace({ project }: { project: Project }) {
   const { player, frames, error } = usePlayer(project);
   const autosave = useAutosave(project);
   const [tab, setTab] = useState<InspectorTab>("style");
-  usePlaybackShortcuts(player);
+  const selection = useEditorStore((s) => s.selection);
+  const canUndo = useProjectStore((s) => s.past.length > 0);
+  const canRedo = useProjectStore((s) => s.future.length > 0);
+  useEditorShortcuts(player);
+
+  // Show the matching panel when something is selected in the timeline.
+  const [lastSelection, setLastSelection] = useState(selection);
+  if (selection !== lastSelection) {
+    setLastSelection(selection);
+    if (selection) setTab(selection.kind);
+  }
+
+  // Keep the player in step with timing edits, including undo and redo.
+  const timing = JSON.stringify([project.videoTracks, project.zooms]);
+  useEffect(() => {
+    player?.projectChanged();
+  }, [player, timing]);
+
+  // A new project starts with nothing selected.
+  useEffect(() => useEditorStore.getState().select(null), [project.id]);
+
+  const run = (action: "undo" | "redo") => {
+    useProjectStore.getState()[action]();
+    player?.projectChanged();
+  };
 
   return (
     <div className="flex h-dvh min-w-[1280px] flex-col bg-background">
       <header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-3 text-sm">
           <Link href="/editor" className="text-muted-foreground hover:text-foreground">
-            New project
+            Projects
           </Link>
           <span className="text-muted-foreground" aria-hidden>
             /
           </span>
           <h1 className="font-medium">{project.name}</h1>
         </div>
-        {autosave.error && (
-          <p role="status" className="text-xs text-red-400">
-            {autosave.error}
-          </p>
-        )}
+        <div className="flex items-center gap-2">
+          {autosave.error && (
+            <p role="status" className="text-xs text-red-400">
+              {autosave.error}
+            </p>
+          )}
+          <Button size="icon-sm" variant="ghost" aria-label="Undo" aria-keyshortcuts="Meta+Z Control+Z" title="Undo (⌘Z / Ctrl+Z)" disabled={!canUndo} onClick={() => run("undo")}>
+            <Undo2Icon />
+          </Button>
+          <Button size="icon-sm" variant="ghost" aria-label="Redo" aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z" title="Redo (⇧⌘Z / Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => run("redo")}>
+            <Redo2Icon />
+          </Button>
+          <AddVideoButton />
+        </div>
       </header>
       <div className="flex min-h-0 flex-1">
         <aside className="w-64 shrink-0 overflow-y-auto border-r p-4">
           <BackgroundsRail />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
-          <section aria-label="Preview" className="relative flex min-h-0 flex-1 p-8">
+          <section aria-label="Preview" className="relative flex min-h-0 flex-1 p-6">
             <PreviewCanvas project={project} frames={frames} player={player} />
             {error && (
               <p
@@ -112,13 +135,16 @@ function Workspace({ project }: { project: Project }) {
               </p>
             )}
           </section>
-          <section aria-label="Timeline" className="h-40 shrink-0 border-t">
+          <section aria-label="Timeline" className="flex h-64 shrink-0 flex-col border-t">
             <Transport project={project} player={player} />
+            <div className="min-h-0 flex-1">
+              <Timeline project={project} player={player} />
+            </div>
           </section>
         </main>
         <aside aria-label="Inspector" className="flex w-80 shrink-0 flex-col border-l">
-          <div role="tablist" aria-label="Inspector panels" className="flex shrink-0 gap-1 border-b px-4 pt-3">
-            {(["style", "export"] as const).map((id) => (
+          <div role="tablist" aria-label="Inspector panels" className="flex shrink-0 gap-1 border-b px-3 pt-3">
+            {TABS.map((id) => (
               <button
                 key={id}
                 id={`tab-${id}`}
@@ -128,7 +154,7 @@ function Workspace({ project }: { project: Project }) {
                 aria-controls={`panel-${id}`}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "-mb-px border-b-2 px-3 pb-2 text-sm font-medium capitalize outline-none focus-visible:text-foreground focus-visible:underline",
+                  "-mb-px border-b-2 px-2.5 pb-2 text-sm font-medium capitalize outline-none focus-visible:text-foreground focus-visible:underline",
                   tab === id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
                 )}
               >
@@ -137,11 +163,62 @@ function Workspace({ project }: { project: Project }) {
             ))}
           </div>
           <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex-1 overflow-y-auto p-4">
-            {tab === "style" ? <StylePanel /> : <ExportPanel project={project} />}
+            {tab === "style" && <StylePanel />}
+            {tab === "clip" && <ClipPanel project={project} player={player} />}
+            {tab === "zoom" && <ZoomPanel project={project} />}
+            {tab === "export" && <ExportPanel project={project} />}
           </div>
         </aside>
       </div>
     </div>
+  );
+}
+
+/** Imports another video and appends it to the end of the timeline. */
+function AddVideoButton() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const commit = useProjectStore((s) => s.commit);
+  const select = useEditorStore((s) => s.select);
+
+  return (
+    <>
+      {message && (
+        <p role="alert" className="max-w-xs truncate text-xs text-red-400" title={message}>
+          {message}
+        </p>
+      )}
+      <Button size="sm" variant="outline" disabled={busy} onClick={() => inputRef.current?.click()}>
+        <PlusIcon />
+        {busy ? "Adding…" : "Add video"}
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT_ATTRIBUTE}
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Video file to add"
+        data-testid="add-video-input"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          setMessage(null);
+          try {
+            const { asset } = await importAsset(file);
+            const clipId = crypto.randomUUID();
+            if (commit((d) => appendVideo(d, asset, clipId))) select({ kind: "clip", id: clipId });
+          } catch (error) {
+            setMessage(error instanceof ImportError ? error.message : "Couldn't add that video.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </>
   );
 }
 

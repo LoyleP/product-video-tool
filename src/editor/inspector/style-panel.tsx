@@ -36,7 +36,13 @@ export function StylePanel() {
           ))}
         </div>
         {bg.type === "solid" && (
-          <ColorField label="Color" value={bg.color} onChange={(color) => setBackground({ type: "solid", color })} />
+          <ColorField
+            label="Color"
+            value={bg.color}
+            onChange={(color) =>
+              updateStyle((s) => void (s.background = { type: "solid", color }), { coalesce: "solid-color" })
+            }
+          />
         )}
         {bg.type === "gradient" && (
           <>
@@ -46,9 +52,12 @@ export function StylePanel() {
                 label={`Color ${i + 1}`}
                 value={stop.color}
                 onChange={(color) =>
-                  updateStyle((s) => {
-                    if (s.background.type === "gradient") s.background.stops[i]!.color = color;
-                  })
+                  updateStyle(
+                    (s) => {
+                      if (s.background.type === "gradient") s.background.stops[i]!.color = color;
+                    },
+                    { coalesce: `gradient-color-${i}` },
+                  )
                 }
               />
             ))}
@@ -59,9 +68,12 @@ export function StylePanel() {
               max={360}
               format={(v) => `${v}°`}
               onChange={(v) =>
-                updateStyle((s) => {
-                  if (s.background.type === "gradient") s.background.angle = v;
-                })
+                updateStyle(
+                  (s) => {
+                    if (s.background.type === "gradient") s.background.angle = v;
+                  },
+                  { coalesce: "gradient-angle" },
+                )
               }
             />
           </>
@@ -75,7 +87,7 @@ export function StylePanel() {
           min={0}
           max={30}
           format={(v) => `${v}%`}
-          onChange={(v) => updateStyle((s) => void (s.padding = v / 100))}
+          onChange={(v) => updateStyle((s) => void (s.padding = v / 100), { coalesce: "padding" })}
         />
         <SliderField
           label="Corner radius"
@@ -83,7 +95,18 @@ export function StylePanel() {
           min={0}
           max={120}
           format={(v) => `${v}px`}
-          onChange={(v) => updateStyle((s) => void (s.cornerRadius = v))}
+          onChange={(v) => updateStyle((s) => void (s.cornerRadius = v), { coalesce: "cornerRadius" })}
+        />
+      </Section>
+
+      <Section title="Zoom">
+        <SliderField
+          label="Background blur"
+          value={style.zoomBackgroundBlur}
+          min={0}
+          max={40}
+          format={(v) => (v === 0 ? "off" : `${v}px`)}
+          onChange={(v) => updateStyle((s) => void (s.zoomBackgroundBlur = v), { coalesce: "zoomBackgroundBlur" })}
         />
       </Section>
 
@@ -94,7 +117,7 @@ export function StylePanel() {
           min={0}
           max={200}
           format={(v) => `${v}px`}
-          onChange={(v) => updateStyle((s) => void (s.shadow.blur = v))}
+          onChange={(v) => updateStyle((s) => void (s.shadow.blur = v), { coalesce: "shadow.blur" })}
         />
         <SliderField
           label="Offset"
@@ -102,7 +125,7 @@ export function StylePanel() {
           min={0}
           max={100}
           format={(v) => `${v}px`}
-          onChange={(v) => updateStyle((s) => void (s.shadow.offsetY = v))}
+          onChange={(v) => updateStyle((s) => void (s.shadow.offsetY = v), { coalesce: "shadow.offsetY" })}
         />
         <SliderField
           label="Opacity"
@@ -110,7 +133,7 @@ export function StylePanel() {
           min={0}
           max={100}
           format={(v) => `${v}%`}
-          onChange={(v) => updateStyle((s) => void (s.shadow.opacity = v / 100))}
+          onChange={(v) => updateStyle((s) => void (s.shadow.opacity = v / 100), { coalesce: "shadow.opacity" })}
         />
       </Section>
     </div>

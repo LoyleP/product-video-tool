@@ -7,7 +7,7 @@ import { getAssetFile } from "@/storage/asset-files";
 import { StorageError } from "@/storage/errors";
 import { Player, type PlayerState } from "./player";
 
-const IDLE: PlayerState = { time: 0, playing: false, frameVersion: 0 };
+const IDLE: PlayerState = { time: 0, playing: false, rate: 1, frameVersion: 0 };
 const noopSubscribe = () => () => {};
 
 /** Opens the project's media and creates a Player for it. */

@@ -76,24 +76,24 @@ async function exportAndRead(page: Page) {
 
 test("plays and pauses with the button and Space", async ({ page }) => {
   await importFixture(page, "landscape-h264-aac.mp4");
-  await page.getByRole("button", { name: "Play" }).click();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect.poll(() => timeDisplaySeconds(page), { timeout: 5_000 }).toBeGreaterThan(0.5);
-  await page.getByRole("button", { name: "Pause" }).click();
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
   const paused = await timeDisplaySeconds(page);
   await page.waitForTimeout(400);
   expect(await timeDisplaySeconds(page)).toBe(paused);
 
   await page.getByTestId("preview-canvas").click();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toBeVisible();
 });
 
 test("stops at the end of the video", async ({ page }) => {
   await importFixture(page, "landscape-h264-aac.mp4");
-  await page.getByRole("button", { name: "Play" }).click();
-  await expect(page.getByRole("button", { name: "Play" })).toBeVisible({ timeout: 8_000 });
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Play", exact: true })).toBeVisible({ timeout: 8_000 });
   expect(await timeDisplaySeconds(page)).toBeGreaterThan(2.9);
 });
 
@@ -128,6 +128,7 @@ test("exported audio is in sync with video within one frame", async ({ page }) =
 
 test("trim changes the exported duration", async ({ page }) => {
   await importFixture(page, "landscape-h264-aac.mp4");
+  await page.getByTestId("timeline-clip").click();
   const trimStart = page.getByRole("slider", { name: "Trim start" });
   await trimStart.focus();
   // Radix moves 10 steps (100 ms) per PageUp.
