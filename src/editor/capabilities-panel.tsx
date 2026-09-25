@@ -47,7 +47,7 @@ export function CapabilitiesPanel({ caps }: { caps: Capabilities }) {
   }, [caps]);
 
   return (
-    <details open className="group" data-testid="capabilities-panel">
+    <details className="group" data-testid="capabilities-panel">
       <summary className="cursor-pointer text-xs font-medium tracking-wide text-muted-foreground uppercase outline-none focus-visible:underline">
         Debug: capabilities
       </summary>
