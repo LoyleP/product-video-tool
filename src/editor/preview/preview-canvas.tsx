@@ -2,10 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FrameProvider } from "@/engine/frame-provider";
-import { renderFrame } from "@/engine/render-frame";
+import { canvasToMedia } from "@/engine/camera";
+import { layoutAt, renderFrame } from "@/engine/render-frame";
 import type { Micros } from "@/engine/time";
 import { clipAt, sourceTimeAt } from "@/engine/timeline";
 import type { Project } from "@/schema/project";
+import { updateZoom } from "@/store/edits";
+import { useEditorStore } from "@/store/editor-store";
+import { useProjectStore } from "@/store/project-store";
 import { takeImportDuration } from "../import/import-timing";
 import type { Player } from "./player";
 import { usePlayerState } from "./use-player";
@@ -27,6 +31,9 @@ function hasFirstFrame(project: Project, frames: FrameProvider, time: Micros): b
 /** Draws the project at the playhead with renderFrame, fitted to the available space. */
 export function PreviewCanvas({ project, frames, player }: Props) {
   const { time, frameVersion } = usePlayerState(player);
+  const selection = useEditorStore((s) => s.selection);
+  const commit = useProjectStore((s) => s.commit);
+  const aiming = selection?.kind === "zoom";
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
@@ -71,10 +78,23 @@ export function PreviewCanvas({ project, frames, player }: Props) {
       <canvas
         ref={canvasRef}
         data-testid="preview-canvas"
-        aria-label="Video preview"
+        aria-label={aiming ? "Video preview. Click to aim the selected zoom." : "Video preview"}
         role="img"
         style={{ width: cssWidth, height: cssHeight }}
-        className="rounded-sm"
+        className={aiming ? "cursor-crosshair rounded-sm" : "rounded-sm"}
+        onPointerDown={(e) => {
+          if (selection?.kind !== "zoom" || cssWidth === 0) return;
+          // Map the click through the current camera to a point in the media.
+          const box = e.currentTarget.getBoundingClientRect();
+          const point = {
+            x: ((e.clientX - box.left) / box.width) * project.canvas.width,
+            y: ((e.clientY - box.top) / box.height) * project.canvas.height,
+          };
+          const layout = layoutAt(project, time);
+          if (!layout.primaryRect) return;
+          const focus = canvasToMedia(point, layout.primaryRect, layout.transform);
+          commit((d) => updateZoom(d, selection.id, { focus }));
+        }}
       />
     </div>
   );
