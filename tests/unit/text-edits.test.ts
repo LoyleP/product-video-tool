@@ -11,7 +11,9 @@ import {
   deleteText,
   MAX_TEXT_TRACKS,
   moveText,
+  setTrackHidden,
   updateGesture,
+  updateOverlay,
   updateText,
 } from "@/store/edits";
 
@@ -118,5 +120,36 @@ describe("presets", () => {
     const [, other] = edit(project(), (d) => applyPreset(d, BUILT_IN_PRESETS[0]!));
     const [, restored] = edit(other, (d) => applyPreset(d, saved));
     expect(restored.style).toEqual(p.style);
+  });
+});
+
+describe("overlay tracks", () => {
+  function withCamera() {
+    const p = project();
+    return produce(p, (d) => {
+      d.videoTracks.push({
+        id: "cam",
+        hidden: false,
+        overlay: { shape: "circle", size: 0.26, corner: "bottom-right", mirror: true },
+        clips: [],
+      });
+    });
+  }
+
+  it("updates shape, corner and size within limits", () => {
+    const [ok, p] = edit(withCamera(), (d) => updateOverlay(d, "cam", { shape: "rounded", corner: "top-left", size: 2 }));
+    expect(ok).toBe(true);
+    expect(p.videoTracks[1]!.overlay).toEqual({ shape: "rounded", size: 0.6, corner: "top-left", mirror: true });
+  });
+
+  it("rejects no-ops and tracks without an overlay", () => {
+    expect(edit(withCamera(), (d) => updateOverlay(d, "cam", { mirror: true }))[0]).toBe(false);
+    expect(edit(withCamera(), (d) => updateOverlay(d, withCamera().videoTracks[0]!.id, { size: 0.3 }))[0]).toBe(false);
+  });
+
+  it("hides and shows a track", () => {
+    const [, hidden] = edit(withCamera(), (d) => setTrackHidden(d, "cam", true));
+    expect(hidden.videoTracks[1]!.hidden).toBe(true);
+    expect(edit(hidden, (d) => setTrackHidden(d, "cam", true))[0]).toBe(false);
   });
 });

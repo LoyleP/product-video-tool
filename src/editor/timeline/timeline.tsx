@@ -8,7 +8,17 @@ import { formatTime } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/schema/project";
 import { GESTURE_DURATION } from "@/engine/layers/gestures";
-import { addText, addZoom, moveClip, moveText, moveZoom, trimClipEdge, updateGesture, updateText, updateZoom } from "@/store/edits";
+import {
+  addText,
+  addZoom,
+  moveClip,
+  moveText,
+  moveZoom,
+  trimClipEdge,
+  updateGesture,
+  updateText,
+  updateZoom,
+} from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
 import type { Player } from "../preview/player";
@@ -25,7 +35,10 @@ let dragSessions = 0;
 function tickLabel(seconds: number, step: number): string {
   const m = Math.floor(seconds / 60);
   const sec = seconds - m * 60;
-  const text = step < 1 ? sec.toFixed(step < 0.5 ? 2 : 1).padStart(step < 0.5 ? 5 : 4, "0") : String(Math.round(sec)).padStart(2, "0");
+  const text =
+    step < 1
+      ? sec.toFixed(step < 0.5 ? 2 : 1).padStart(step < 0.5 ? 5 : 4, "0")
+      : String(Math.round(sec)).padStart(2, "0");
   return `${m}:${text}`;
 }
 
@@ -213,10 +226,13 @@ export function Timeline({ project, player }: { project: Project; player: Player
             </div>
           </div>
 
-          <Row label="Video">
-            <div className="absolute inset-0" onPointerDown={scrubFrom} />
-            {project.videoTracks.flatMap((track) =>
-              track.clips.map((clip) => {
+          {project.videoTracks.map((track, trackIndex) => (
+            <Row
+              key={track.id}
+              label={track.overlay ? "Camera" : trackIndex === 0 ? "Video" : `Video ${trackIndex + 1}`}
+            >
+              <div className="absolute inset-0" onPointerDown={scrubFrom} />
+              {track.clips.map((clip) => {
                 const asset = project.assets[clip.assetId];
                 const selected = selection?.kind === "clip" && selection.id === clip.id;
                 const left = toPx(clip.timelineStart);
@@ -267,9 +283,9 @@ export function Timeline({ project, player }: { project: Project; player: Player
                     {clip.muted && <VolumeXIcon className="size-3 shrink-0" aria-label="Muted" />}
                   </Block>
                 );
-              }),
-            )}
-          </Row>
+              })}
+            </Row>
+          ))}
 
           <Row
             label="Zoom"

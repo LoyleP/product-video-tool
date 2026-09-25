@@ -4,7 +4,17 @@ import type { Micros } from "@/engine/time";
 import { clipDuration, clipEnd, sourceTimeAt } from "@/engine/timeline";
 import { DEFAULT_FONT_FAMILY } from "@/engine/text/fonts";
 import type { StylePreset } from "@/schema/presets";
-import type { Clip, Gesture, MediaAsset, Project, TextLayer, TextTrack, VideoTrack, ZoomSegment } from "@/schema/project";
+import type {
+  Clip,
+  Gesture,
+  MediaAsset,
+  Overlay,
+  Project,
+  TextLayer,
+  TextTrack,
+  VideoTrack,
+  ZoomSegment,
+} from "@/schema/project";
 
 /**
  * Pure edit operations on an Immer draft of the project. Each returns false when the edit is rejected
@@ -408,5 +418,26 @@ export function applyPreset(project: P, preset: StylePreset): boolean {
       }
     }
   }
+  return true;
+}
+
+// Overlay tracks (webcam)
+
+/** Updates the picture-in-picture settings of an overlay track. */
+export function updateOverlay(project: P, trackId: string, patch: Partial<Overlay>): boolean {
+  const track = project.videoTracks.find((t) => t.id === trackId);
+  if (!track?.overlay) return false;
+  const next = { ...track.overlay, ...patch };
+  next.size = Math.min(0.6, Math.max(0.05, next.size));
+  if (JSON.stringify(next) === JSON.stringify(track.overlay)) return false;
+  track.overlay = next;
+  return true;
+}
+
+/** Shows or hides a video track (for example the webcam). */
+export function setTrackHidden(project: P, trackId: string, hidden: boolean): boolean {
+  const track = project.videoTracks.find((t) => t.id === trackId);
+  if (!track || track.hidden === hidden) return false;
+  track.hidden = hidden;
   return true;
 }
