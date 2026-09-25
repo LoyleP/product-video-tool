@@ -7,14 +7,15 @@ import type { Micros } from "@/engine/time";
 import { clipAt, sourceTimeAt } from "@/engine/timeline";
 import type { Project } from "@/schema/project";
 import { takeImportDuration } from "../import/import-timing";
+import type { Player } from "./player";
+import { usePlayerState } from "./use-player";
 
 const NO_FRAMES: FrameProvider = { getFrame: () => null };
 
 interface Props {
   project: Project;
   frames: FrameProvider | null;
-  frameVersion: number;
-  time: Micros;
+  player: Player | null;
 }
 
 function hasFirstFrame(project: Project, frames: FrameProvider, time: Micros): boolean {
@@ -23,8 +24,9 @@ function hasFirstFrame(project: Project, frames: FrameProvider, time: Micros): b
   return !!clip && frames.getFrame(clip.assetId, sourceTimeAt(clip, time)) !== null;
 }
 
-/** Draws the project at `time` with renderFrame, fitted to the available space. */
-export function PreviewCanvas({ project, frames, frameVersion, time }: Props) {
+/** Draws the project at the playhead with renderFrame, fitted to the available space. */
+export function PreviewCanvas({ project, frames, player }: Props) {
+  const { time, frameVersion } = usePlayerState(player);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
