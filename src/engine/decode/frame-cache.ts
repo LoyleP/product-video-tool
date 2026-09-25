@@ -38,6 +38,18 @@ export class FrameCache<T extends Closable> {
     return null;
   }
 
+  /** The latest cached frame starting at or before `t`, used to hold the last good frame while decoding catches up. */
+  lookupAtOrBefore(t: Micros): T | null {
+    let best: Entry<T> | null = null;
+    for (const entry of this.entries.values()) {
+      if (entry.start <= t && (!best || entry.start > best.start)) best = entry;
+    }
+    if (!best) return null;
+    this.entries.delete(best.start);
+    this.entries.set(best.start, best);
+    return best.value;
+  }
+
   /** Adds a frame. Returns the cached value, which is the existing one when `start` is already cached. */
   insert(start: Micros, end: Micros, value: T): T {
     const existing = this.entries.get(start);

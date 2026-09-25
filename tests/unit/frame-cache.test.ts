@@ -57,3 +57,25 @@ describe("FrameCache", () => {
     expect(cache.lookup(100)).toBe(a);
   });
 });
+
+describe("FrameCache.lookupAtOrBefore", () => {
+  it("returns the latest frame starting at or before t, even across gaps", () => {
+    const cache = new FrameCache<FakeFrame>(4);
+    const a = cache.insert(0, 10, new FakeFrame("a"));
+    const b = cache.insert(100, 110, new FakeFrame("b"));
+    expect(cache.lookupAtOrBefore(50)).toBe(a);
+    expect(cache.lookupAtOrBefore(100)).toBe(b);
+    expect(cache.lookupAtOrBefore(10_000)).toBe(b);
+    expect(cache.lookupAtOrBefore(-1)).toBeNull();
+  });
+
+  it("counts as a use for LRU purposes", () => {
+    const cache = new FrameCache<FakeFrame>(2);
+    const a = cache.insert(0, 10, new FakeFrame("a"));
+    const b = cache.insert(10, 20, new FakeFrame("b"));
+    cache.lookupAtOrBefore(5);
+    cache.insert(20, 30, new FakeFrame("c"));
+    expect(a.closed).toBe(0);
+    expect(b.closed).toBe(1);
+  });
+});
