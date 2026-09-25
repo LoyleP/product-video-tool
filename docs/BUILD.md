@@ -524,7 +524,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 ## 15. Status
 
 - [x] Phase 0
-- [ ] Phase 1
+- [ ] Phase 1 (in progress: code done on `phase-1-import`; waiting on owner acceptance with real recordings)
 - [ ] Phase 2
 - [ ] Phase 3
 - [ ] Phase 4
