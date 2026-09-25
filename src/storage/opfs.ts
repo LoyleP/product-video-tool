@@ -68,3 +68,21 @@ export async function deleteAssetFile(path: string): Promise<void> {
   const dir = await assetsDirectory();
   await dir.removeEntry(fileName(path)).catch(() => {});
 }
+
+/**
+ * Opens a new OPFS file for writing as it is produced (live recording). The browser accepts the
+ * `{ type: "write", position, data }` chunks that Mediabunny's StreamTarget emits.
+ */
+export async function createAssetWritable(
+  assetId: string,
+  extension: string,
+): Promise<{ path: string; writable: WritableStream<{ type: "write"; data: Uint8Array; position: number }> }> {
+  const path = `${ASSETS_DIR}/${assetId}.${extension}`;
+  const dir = await assetsDirectory();
+  const handle = await dir.getFileHandle(fileName(path), { create: true });
+  if (!("createWritable" in handle)) {
+    throw new StorageError("This browser can't write recordings to local storage. Use a recent Chrome or Edge.");
+  }
+  const writable = await handle.createWritable();
+  return { path, writable: writable as unknown as WritableStream<{ type: "write"; data: Uint8Array; position: number }> };
+}
