@@ -26,7 +26,7 @@ The full specification lives in `docs/BUILD.md`. Read it before starting any tas
 ## Workflow
 
 - One phase per branch (`phase-N-short-name`), small commits, PR into `main`.
-- CI must be green; the Vercel preview URL is where the owner checks acceptance criteria.
+- The `Vercel` check must be green (it runs lint, typecheck, unit tests and build; see BUILD.md 9.2); the Vercel preview URL is where the owner checks acceptance criteria.
 - New engine code ships with unit tests in the same PR.
 - Update section 15 of `docs/BUILD.md` when a phase is done.
 

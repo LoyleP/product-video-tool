@@ -392,11 +392,13 @@ Design direction: minimal, dark UI by default, strong typography, the video is t
 2. Create a GitHub repository (public, so GitHub Actions minutes are free) and push `main`.
 3. In Vercel, import the GitHub repository. The Next.js framework preset is detected automatically. Production branch: `main`.
 4. Every pull request then gets its own Preview deployment URL automatically; merging into `main` deploys to production.
-5. In GitHub, protect `main`: require a pull request and require the `CI` workflow to pass.
+5. In GitHub, protect `main`: require a pull request and require the `Vercel` check to pass (see 9.2).
 6. Locally, run `vercel link` then `vercel env pull .env.local` to sync environment variables.
 7. Phase 7 only: in the Vercel project, Storage tab, create a Blob store. Vercel adds `BLOB_READ_WRITE_TOKEN` to the project environment.
 
 ### 9.2 CI workflow
+
+Current setup: GitHub Actions is unavailable on the owner's account, so the Vercel build is the CI gate. `vercel.json` sets the build command to `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, so any failing check fails the deployment and the `Vercel` status on the PR. The Actions workflow below stays in the repo and runs again automatically once Actions is available. Until then, run `pnpm e2e` locally before merging.
 
 `.github/workflows/ci.yml`:
 
