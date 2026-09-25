@@ -291,7 +291,7 @@ Schema versioning: every persisted project carries `schemaVersion`. Add a migrat
 2. Camera transform applied to everything below except the background (zoom and pan).
 3. Media shadow.
 4. Media layer: the recording, clipped to rounded rect or to the device screen rect.
-5. Device frame overlay (SVG rasterized once per export resolution and cached).
+5. Device frame overlay (vector paths, see 7.9).
 6. Gestures (taps and swipes, in source space so they zoom with the content).
 7. Text layers (canvas space, unaffected by zoom).
 8. Captions (canvas space).
@@ -364,6 +364,7 @@ Manual placement in Phase 4: user clicks on the preview at the playhead to add a
 ### 7.9 Device frames
 
 - Store frames as SVG plus JSON metadata: outer size, screen rect, screen corner radius, notch or island mask, available colors.
+- Implemented as vector drawing code plus metadata in `src/engine/devices.ts` rather than SVG files: workers can't decode SVG images, and the export renders in a worker. Canvas paths also stay sharp at any zoom, and the screen cutout and media placement come from the same numbers, which guarantees alignment.
 - Draw original, generic device frames (modern phone, tablet, laptop, browser window with light and dark chrome) for launch. Apple's official product imagery and design resources have their own license terms; the owner must review them before any Apple-branded bezel ships.
 - Auto-suggest a frame from the video aspect ratio (for example 1179 by 2556 suggests a modern phone).
 
@@ -527,7 +528,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 - [x] Phase 1
 - [x] Phase 2
 - [x] Phase 3 (owner noted small bugs to revisit after Phase 10)
-- [ ] Phase 4
+- [ ] Phase 4 (in progress: code done on `phase-4-frames-text-gestures`; waiting on owner acceptance)
 - [ ] Phase 5
 - [ ] Phase 6
 - [ ] Phase 7
