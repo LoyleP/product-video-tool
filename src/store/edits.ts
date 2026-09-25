@@ -2,7 +2,9 @@ import type { Draft } from "immer";
 import { EASING_PRESETS } from "@/engine/easing";
 import type { Micros } from "@/engine/time";
 import { clipDuration, clipEnd, sourceTimeAt } from "@/engine/timeline";
-import type { Clip, MediaAsset, Project, VideoTrack, ZoomSegment } from "@/schema/project";
+import { DEFAULT_FONT_FAMILY } from "@/engine/text/fonts";
+import type { StylePreset } from "@/schema/presets";
+import type { Clip, Gesture, MediaAsset, Project, TextLayer, TextTrack, VideoTrack, ZoomSegment } from "@/schema/project";
 
 /**
  * Pure edit operations on an Immer draft of the project. Each returns false when the edit is rejected
@@ -244,5 +246,167 @@ export function deleteZoom(project: P, id: string): boolean {
   const index = project.zooms.findIndex((z) => z.id === id);
   if (index === -1) return false;
   project.zooms.splice(index, 1);
+  return true;
+}
+
+// Text layers
+
+export const DEFAULT_TEXT_DURATION: Micros = 3_000_000;
+export const MIN_TEXT_DURATION: Micros = 200_000;
+export const MAX_TEXT_TRACKS = 5;
+
+export function findText(project: P | Project, id: string): { track: TextTrack; layer: TextLayer } | null {
+  for (const track of project.textTracks) {
+    const layer = track.layers.find((l) => l.id === id);
+    if (layer) return { track, layer };
+  }
+  return null;
+}
+
+/** A new text layer: a centered lower third, or a copy of `template`'s look. */
+export function newTextLayer(id: string, start: Micros, end: Micros, template?: TextLayer): TextLayer {
+  return {
+    id,
+    start,
+    end,
+    text: "Your text here",
+    box: template ? { ...template.box } : { x: 0.1, y: 0.78, w: 0.8, h: 0.14 },
+    font: template
+      ? { ...template.font }
+      : { family: DEFAULT_FONT_FAMILY, size: 64, weight: 650, lineHeight: 1.15, letterSpacing: -1 },
+    color: template?.color ?? "#ffffff",
+    align: template?.align ?? "center",
+    animIn: template ? { ...template.animIn } : { type: "fade", duration: 400_000 },
+    animOut: template ? { ...template.animOut } : { type: "fade", duration: 300_000 },
+  };
+}
+
+const overlapsIn = (layers: readonly TextLayer[], start: Micros, end: Micros, exceptId?: string) =>
+  layers.some((l) => l.id !== exceptId && start < l.end && end > l.start);
+
+/**
+ * Adds a 3 s text layer at `t` on the first text track with room, creating a track if needed (max 5).
+ * The new layer copies the look of the most recent text layer.
+ */
+export function addText(project: P, t: Micros, id: string, trackId: string, projectEnd: Micros): boolean {
+  const start = Math.max(0, Math.round(t));
+  const end = Math.min(start + DEFAULT_TEXT_DURATION, Math.max(projectEnd, start + MIN_TEXT_DURATION));
+  if (end - start < MIN_TEXT_DURATION) return false;
+  const all = project.textTracks.flatMap((track) => track.layers);
+  const template = all[all.length - 1];
+  let track = project.textTracks.find((tr) => !overlapsIn(tr.layers, start, end));
+  if (!track) {
+    if (project.textTracks.length >= MAX_TEXT_TRACKS) return false;
+    project.textTracks.push({ id: trackId, layers: [] });
+    track = project.textTracks[project.textTracks.length - 1]!;
+  }
+  track.layers.push(newTextLayer(id, start, end, template as TextLayer | undefined));
+  track.layers.sort((a, b) => a.start - b.start);
+  return true;
+}
+
+export type TextPatch = Partial<Omit<TextLayer, "id" | "box" | "font">> & {
+  box?: Partial<TextLayer["box"]>;
+  font?: Partial<TextLayer["font"]>;
+};
+
+/** Updates a text layer. Timing changes that overlap another layer on the same track are rejected. */
+export function updateText(project: P, id: string, patch: TextPatch): boolean {
+  const found = findText(project, id);
+  if (!found) return false;
+  const { track, layer } = found;
+  const next: TextLayer = {
+    ...layer,
+    ...patch,
+    box: { ...layer.box, ...patch.box },
+    font: { ...layer.font, ...patch.font },
+  };
+  next.start = Math.max(0, Math.round(next.start));
+  next.end = Math.round(next.end);
+  next.box.w = Math.min(1.5, Math.max(0.05, next.box.w));
+  next.box.h = Math.min(1.5, Math.max(0.03, next.box.h));
+  next.box.x = Math.min(1 - 0.02, Math.max(-next.box.w + 0.02, next.box.x));
+  next.box.y = Math.min(1 - 0.02, Math.max(-next.box.h + 0.02, next.box.y));
+  next.font.size = Math.min(400, Math.max(8, next.font.size));
+  if (next.end - next.start < MIN_TEXT_DURATION) return false;
+  if (overlapsIn(track.layers, next.start, next.end, id)) return false;
+  if (JSON.stringify(next) === JSON.stringify(layer)) return false;
+  Object.assign(layer, next);
+  track.layers.sort((a, b) => a.start - b.start);
+  return true;
+}
+
+/** Moves a text layer in time, clamped between its neighbors on the track. */
+export function moveText(project: P, id: string, start: Micros): boolean {
+  const found = findText(project, id);
+  if (!found) return false;
+  const { track, layer } = found;
+  const length = layer.end - layer.start;
+  const others = track.layers.filter((l) => l.id !== id);
+  const prevEnd = others.filter((l) => l.start < layer.start).reduce((m, l) => Math.max(m, l.end), 0);
+  const nextStart = others.filter((l) => l.start >= layer.start).reduce((m, l) => Math.min(m, l.start), Number.MAX_SAFE_INTEGER);
+  const clamped = Math.min(Math.max(Math.round(start), prevEnd), nextStart - length);
+  if (clamped < prevEnd) return false;
+  return updateText(project, id, { start: clamped, end: clamped + length });
+}
+
+export function deleteText(project: P, id: string): boolean {
+  for (const track of project.textTracks) {
+    const index = track.layers.findIndex((l) => l.id === id);
+    if (index === -1) continue;
+    track.layers.splice(index, 1);
+    return true;
+  }
+  return false;
+}
+
+// Gestures
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+export function addGesture(project: P, gesture: Gesture): boolean {
+  project.gestures.push({
+    ...gesture,
+    time: Math.max(0, Math.round(gesture.time)),
+    from: { x: clamp01(gesture.from.x), y: clamp01(gesture.from.y) },
+    to: gesture.to && { x: clamp01(gesture.to.x), y: clamp01(gesture.to.y) },
+  });
+  project.gestures.sort((a, b) => a.time - b.time);
+  return true;
+}
+
+export function updateGesture(project: P, id: string, patch: Partial<Omit<Gesture, "id">>): boolean {
+  const gesture = project.gestures.find((g) => g.id === id);
+  if (!gesture) return false;
+  const next = { ...gesture, ...patch };
+  next.time = Math.max(0, Math.round(next.time));
+  if (next.type === "swipe" && !next.to) next.to = { x: clamp01(next.from.x + 0.2), y: next.from.y };
+  if (JSON.stringify(next) === JSON.stringify(gesture)) return false;
+  Object.assign(gesture, next);
+  project.gestures.sort((a, b) => a.time - b.time);
+  return true;
+}
+
+export function deleteGesture(project: P, id: string): boolean {
+  const index = project.gestures.findIndex((g) => g.id === id);
+  if (index === -1) return false;
+  project.gestures.splice(index, 1);
+  return true;
+}
+
+// Presets
+
+/** Applies a preset's style, and its text style to every text layer. */
+export function applyPreset(project: P, preset: StylePreset): boolean {
+  Object.assign(project.style, structuredClone(preset.style));
+  if (preset.text) {
+    for (const track of project.textTracks) {
+      for (const layer of track.layers) {
+        layer.font.family = preset.text.family;
+        layer.font.weight = preset.text.weight;
+        layer.color = preset.text.color;
+      }
+    }
+  }
   return true;
 }

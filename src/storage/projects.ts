@@ -1,23 +1,8 @@
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Project } from "@/schema/project";
+import { db } from "./db";
 import { StorageError } from "./errors";
 import { migrateProject } from "./migrations";
 import { deleteAssetFile } from "./opfs";
-
-interface StudioDB extends DBSchema {
-  projects: { key: string; value: unknown };
-}
-
-let dbPromise: Promise<IDBPDatabase<StudioDB>> | null = null;
-
-function db(): Promise<IDBPDatabase<StudioDB>> {
-  dbPromise ??= openDB<StudioDB>("studio", 1, {
-    upgrade(database) {
-      database.createObjectStore("projects", { keyPath: "id" });
-    },
-  });
-  return dbPromise;
-}
 
 export async function saveProject(project: Project): Promise<void> {
   try {
