@@ -427,7 +427,7 @@ jobs:
 
 `package.json` scripts: `dev`, `build`, `start`, `lint`, `typecheck` (runs `tsc` with `noEmit` from tsconfig), `test` (`vitest run`), `e2e` (`playwright test`).
 
-Phase 3 onward: add a second job that runs Playwright against the Vercel preview URL (use the `deployment_status` event), covering import, edit, export of a 3 second fixture video.
+Phase 3 onward: add a second job that runs Playwright against the Vercel preview URL (use the `deployment_status` event), covering import, edit, export of a 3 second fixture video. Blocked while GitHub Actions is unavailable on the owner's account: run `pnpm e2e` locally before merging, or `PLAYWRIGHT_BASE_URL=<preview url> pnpm e2e` against a preview.
 
 ### 9.3 Headers
 
@@ -526,7 +526,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 - [x] Phase 0
 - [x] Phase 1
 - [x] Phase 2
-- [ ] Phase 3
+- [ ] Phase 3 (in progress: code done on `phase-3-timeline-zoom`; waiting on owner acceptance)
 - [ ] Phase 4
 - [ ] Phase 5
 - [ ] Phase 6
