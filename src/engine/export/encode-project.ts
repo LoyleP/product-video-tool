@@ -66,7 +66,7 @@ export async function encodeProject(
     if (aacConfig && audioSource) aac = new AacTrackEncoder(aacConfig, audioSource, await measureAacDelay(aacConfig));
     for (const asset of Object.values(project.assets)) {
       const file = req.files[asset.id];
-      if (asset.kind === "video" && file) await frames.open(asset.id, file);
+      if (asset.kind === "video" && file) await frames.open(asset.id, file, asset.videoTrack);
     }
     await output.start();
 

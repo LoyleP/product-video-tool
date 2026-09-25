@@ -12,6 +12,7 @@ import { mediaRect, type Rect } from "./geometry";
 import { drawBackground } from "./layers/background";
 import { drawGestures } from "./layers/gestures";
 import { drawMedia, type MediaPlacement, type Radii } from "./layers/media";
+import { drawOverlay, placeOverlay, type OverlayPlacement } from "./layers/overlay";
 import { drawText } from "./layers/text";
 import type { Micros } from "./time";
 import { activeClips } from "./timeline";
@@ -22,6 +23,8 @@ export interface FrameLayout {
   /** Screen rect of the first visible clip: what the camera frames and gestures are placed in. */
   primaryRect: Rect | null;
   media: MediaPlacement[];
+  /** Picture-in-picture tracks (webcam), in canvas space. */
+  overlays: OverlayPlacement[];
 }
 
 function placeMedia(project: Project, assetId: string, sourceTime: Micros, width: number, height: number): MediaPlacement {
@@ -57,14 +60,16 @@ function placeMedia(project: Project, assetId: string, sourceTime: Micros, width
 export function layoutAt(project: Project, t: Micros): FrameLayout {
   const camera = resolveCamera(project.zooms, t);
   const media: MediaPlacement[] = [];
-  for (const { clip, sourceTime } of activeClips(project, t)) {
+  const overlays: OverlayPlacement[] = [];
+  for (const { clip, track, sourceTime } of activeClips(project, t)) {
     const asset = project.assets[clip.assetId];
     if (!asset?.width || !asset.height) continue;
-    media.push(placeMedia(project, asset.id, sourceTime, asset.width, asset.height));
+    if (track.overlay) overlays.push(placeOverlay(project, track.overlay, asset.id, sourceTime, asset.width / asset.height));
+    else media.push(placeMedia(project, asset.id, sourceTime, asset.width, asset.height));
   }
   const primaryRect = media[0]?.screen ?? null;
   const transform = primaryRect ? cameraTransform(project.canvas, primaryRect, camera) : IDENTITY_TRANSFORM;
-  return { camera, transform, primaryRect, media };
+  return { camera, transform, primaryRect, media, overlays };
 }
 
 /**
@@ -95,6 +100,11 @@ export function renderFrame(target: RenderTarget, project: Project, t: Micros, f
   }
   if (layout.primaryRect) drawGestures(ctx, project.gestures, t, layout.primaryRect, pixelScale);
   ctx.restore();
+
+  // Overlays such as the webcam stay in canvas space, above the zoomed content.
+  for (const overlay of layout.overlays) {
+    drawOverlay(ctx, frames.getFrame(overlay.assetId, overlay.sourceTime), overlay, scale);
+  }
 
   // 7. Text in canvas space, unaffected by zoom.
   for (const track of project.textTracks) {

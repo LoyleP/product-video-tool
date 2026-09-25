@@ -39,13 +39,13 @@ export function exportRange(project: Project): { start: Micros; end: Micros } {
   return { start, end: Math.max(start, Math.min(range.end, duration)) };
 }
 
-/** Every visible clip active at `t`, with the source time to show. */
-export function activeClips(project: Project, t: Micros): { clip: Clip; sourceTime: Micros }[] {
-  const result: { clip: Clip; sourceTime: Micros }[] = [];
+/** Every visible clip active at `t`, with its track and the source time to show. */
+export function activeClips(project: Project, t: Micros): { clip: Clip; track: VideoTrack; sourceTime: Micros }[] {
+  const result: { clip: Clip; track: VideoTrack; sourceTime: Micros }[] = [];
   for (const track of project.videoTracks) {
     if (track.hidden) continue;
     const clip = clipAt(track, t);
-    if (clip) result.push({ clip, sourceTime: sourceTimeAt(clip, t) });
+    if (clip) result.push({ clip, track, sourceTime: sourceTimeAt(clip, t) });
   }
   return result;
 }

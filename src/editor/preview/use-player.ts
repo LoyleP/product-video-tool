@@ -37,7 +37,7 @@ export function usePlayer(project: Project): {
     };
     (async () => {
       for (const asset of Object.values(projectRef.current.assets)) {
-        if (asset.kind === "video") await frames.open(asset.id, await fileFor(asset.id));
+        if (asset.kind === "video") await frames.open(asset.id, await fileFor(asset.id), asset.videoTrack);
       }
       if (cancelled) return;
       player = new Player(frames, fileFor, () => projectRef.current);

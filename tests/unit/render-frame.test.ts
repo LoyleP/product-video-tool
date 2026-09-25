@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DrawableFrame, FrameProvider, RenderContext } from "@/engine/frame-provider";
-import { renderFrame } from "@/engine/render-frame";
+import { layoutAt, renderFrame } from "@/engine/render-frame";
 import { createProjectFromVideo } from "@/schema/defaults";
 import type { Project } from "@/schema/project";
 
@@ -167,5 +167,44 @@ describe("renderFrame with zoom", () => {
     const { ctx, calls } = recordingContext();
     renderFrame({ ctx, width: 1920, height: 1080 }, p, 4_000_000, provider(null).frames);
     expect(calls.some((c) => c[0] === "set:filter")).toBe(false);
+  });
+});
+
+describe("overlay tracks", () => {
+  function withWebcam(corner: "bottom-right" | "top-left" = "bottom-right") {
+    const p = project();
+    p.assets.cam = { ...p.assets.asset!, id: "cam", width: 1280, height: 720, videoTrack: 1, hasAudio: false };
+    p.videoTracks.push({
+      id: "cam-track",
+      hidden: false,
+      overlay: { shape: "circle", size: 0.25, corner, mirror: true },
+      clips: [{ ...p.videoTracks[0]!.clips[0]!, id: "cam-clip", assetId: "cam" }],
+    });
+    return p;
+  }
+
+  it("places the webcam in a corner, outside the camera framing", () => {
+    const layout = layoutAt(withWebcam(), 1_000_000);
+    expect(layout.media).toHaveLength(1);
+    expect(layout.overlays).toHaveLength(1);
+    const o = layout.overlays[0]!;
+    expect(o.rect.w).toBeCloseTo(270); // circle: square of 25% of 1080
+    expect(o.rect.x + o.rect.w).toBeCloseTo(1920 - 0.035 * 1080);
+    expect(o.rect.y + o.rect.h).toBeCloseTo(1080 - 0.035 * 1080);
+    expect(layout.primaryRect).toEqual(layout.media[0]!.screen);
+    const topLeft = layoutAt(withWebcam("top-left"), 0).overlays[0]!;
+    expect(topLeft.rect.x).toBeCloseTo(0.035 * 1080);
+  });
+
+  it("draws overlays after the camera transform is removed", () => {
+    const { ctx, calls } = recordingContext();
+    const drawn: string[] = [];
+    const frames: FrameProvider = {
+      getFrame: (assetId) => ({ width: 1, height: 1, draw: () => drawn.push(assetId) }),
+    };
+    renderFrame({ ctx, width: 1920, height: 1080 }, withWebcam(), 1_000_000, frames);
+    expect(drawn).toEqual(["asset", "cam"]);
+    // Mirrored webcam flips horizontally.
+    expect(calls).toContainEqual(["scale", -1, 1]);
   });
 });
