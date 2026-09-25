@@ -29,3 +29,5 @@ The full specification lives in `docs/BUILD.md`. Read it before starting any tas
 - CI must be green; the Vercel preview URL is where the owner checks acceptance criteria.
 - New engine code ships with unit tests in the same PR.
 - Update section 15 of `docs/BUILD.md` when a phase is done.
+
+@AGENTS.md
