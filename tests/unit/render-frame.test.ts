@@ -120,3 +120,52 @@ describe("renderFrame", () => {
     expect(JSON.stringify(a.calls)).toBe(JSON.stringify(b.calls));
   });
 });
+
+describe("renderFrame with zoom", () => {
+  const zoomed = () => {
+    const p = project();
+    p.zooms = [
+      {
+        id: "z",
+        start: 0,
+        end: 3_000_000,
+        scale: 2,
+        focus: { x: 0.5, y: 0.5 },
+        easeIn: { type: "cubic-bezier", p: [0, 0, 1, 1] },
+        easeOut: { type: "cubic-bezier", p: [0, 0, 1, 1] },
+        origin: "manual",
+      },
+    ];
+    return p;
+  };
+
+  it("applies the camera transform after the background", () => {
+    const { ctx, calls } = recordingContext();
+    renderFrame({ ctx, width: 1920, height: 1080 }, zoomed(), 1_000_000, provider(null).frames);
+    const names = calls.map((c) => c[0]);
+    const transform = calls.find((c) => c[0] === "transform")!;
+    expect(transform[1]).toBe(2);
+    expect(names.indexOf("fillRect")).toBeLessThan(names.indexOf("transform"));
+    // Shadows scale with zoom because canvas shadows ignore transforms.
+    expect(calls).toContainEqual(["set:shadowBlur", zoomed().style.shadow.blur * 2]);
+  });
+
+  it("blurs the background in proportion to zoom progress", () => {
+    const p = zoomed();
+    p.style.zoomBackgroundBlur = 20;
+    const half = recordingContext();
+    renderFrame({ ctx: half.ctx, width: 1920, height: 1080 }, p, 300_000, provider(null).frames);
+    expect(half.calls).toContainEqual(["set:filter", "blur(10px)"]);
+    const full = recordingContext();
+    renderFrame({ ctx: full.ctx, width: 960, height: 540 }, p, 1_000_000, provider(null).frames);
+    expect(full.calls).toContainEqual(["set:filter", "blur(10px)"]); // 20 canvas units at half scale
+  });
+
+  it("does not blur at rest", () => {
+    const p = zoomed();
+    p.style.zoomBackgroundBlur = 20;
+    const { ctx, calls } = recordingContext();
+    renderFrame({ ctx, width: 1920, height: 1080 }, p, 4_000_000, provider(null).frames);
+    expect(calls.some((c) => c[0] === "set:filter")).toBe(false);
+  });
+});
