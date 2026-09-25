@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { projectDuration } from "@/engine/timeline";
-import { addZoom, deleteClip, deleteZoom, splitClip } from "@/store/edits";
+import { addText, addZoom, deleteClip, deleteGesture, deleteText, deleteZoom, splitClip } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
 import type { Player } from "./preview/player";
@@ -87,15 +87,27 @@ export function useEditorShortcuts(player: Player | null) {
             if (commit((d) => addZoom(d, t, id, projectDuration(project)) !== null)) select({ kind: "zoom", id });
             return true;
           }
-          case "delete":
-          case "backspace":
-            if (!selection) return false;
-            if (selection.kind === "clip" ? commit((d) => deleteClip(d, selection.id)) : commit((d) => deleteZoom(d, selection.id))) {
-              select(null);
-            }
+          case "t": {
+            const id = crypto.randomUUID();
+            const t = player.getState().time;
+            if (commit((d) => addText(d, t, id, crypto.randomUUID(), projectDuration(project)))) select({ kind: "text", id });
             return true;
+          }
+          case "g": {
+            const { gestureTool, setGestureTool } = useEditorStore.getState();
+            setGestureTool(!gestureTool);
+            return true;
+          }
+          case "delete":
+          case "backspace": {
+            if (!selection) return false;
+            const remove = { clip: deleteClip, zoom: deleteZoom, text: deleteText, gesture: deleteGesture }[selection.kind];
+            if (commit((d) => remove(d, selection.id))) select(null);
+            return true;
+          }
           case "escape":
             select(null);
+            useEditorStore.getState().setGestureTool(false);
             return true;
           default:
             return false;

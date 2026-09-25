@@ -34,7 +34,7 @@ export function Transport({ project, player }: { project: Project; player: Playe
         </span>
       )}
       <p className="ml-auto text-xs text-muted-foreground">
-        Space play · J K L shuttle · ←→ frame · S split · Z zoom · ⌘Z undo
+        Space play · J K L shuttle · ←→ frame · S split · Z zoom · T text · G taps · ⌘Z undo
       </p>
     </div>
   );

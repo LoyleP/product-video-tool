@@ -51,8 +51,8 @@ test("style changes update the preview and survive a reload", async ({ page }) =
   await importFixture(page, "landscape-h264-aac.mp4");
   const before = await pixel(page, 0.01, 0.01);
 
-  await page.getByRole("button", { name: "Paper" }).click();
-  await expect(page.getByRole("button", { name: "Paper" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Paper", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Paper", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => pixel(page, 0.01, 0.01)).toEqual([250, 250, 250, 255]);
   expect(before).not.toEqual([250, 250, 250, 255]);
 
@@ -65,7 +65,7 @@ test("style changes update the preview and survive a reload", async ({ page }) =
   await page.waitForTimeout(1500);
   await page.reload();
   await expect(page.getByTestId("preview-canvas")).toHaveAttribute("data-first-frame", "ready", { timeout: 10_000 });
-  await expect(page.getByRole("button", { name: "Paper" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Paper", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("slider", { name: "Padding" })).toHaveAttribute("aria-valuenow", "0");
 });
 

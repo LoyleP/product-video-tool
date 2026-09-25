@@ -7,7 +7,8 @@ import { clipDuration, clipEnd, projectDuration } from "@/engine/timeline";
 import { formatTime } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/schema/project";
-import { addZoom, moveClip, moveZoom, trimClipEdge, updateZoom } from "@/store/edits";
+import { GESTURE_DURATION } from "@/engine/layers/gestures";
+import { addText, addZoom, moveClip, moveText, moveZoom, trimClipEdge, updateGesture, updateText, updateZoom } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
 import type { Player } from "../preview/player";
@@ -125,6 +126,10 @@ export function Timeline({ project, player }: { project: Project; player: Player
       for (const c of track.clips) if (c.id !== excludeId) points.push(c.timelineStart, clipEnd(c));
     }
     for (const z of project.zooms) if (z.id !== excludeId) points.push(z.start, z.end);
+    for (const track of project.textTracks) {
+      for (const l of track.layers) if (l.id !== excludeId) points.push(l.start, l.end);
+    }
+    for (const g of project.gestures) if (g.id !== excludeId) points.push(g.time);
     return points;
   };
   const threshold = toTime(SNAP_PX);
@@ -166,6 +171,12 @@ export function Timeline({ project, player }: { project: Project; player: Player
     if (added) select({ kind: "zoom", id });
   };
 
+  const addTextAt = (t: Micros) => {
+    const id = crypto.randomUUID();
+    if (commit((d) => addText(d, t, id, crypto.randomUUID(), duration))) select({ kind: "text", id });
+  };
+  const textTracks = project.textTracks.length > 0 ? project.textTracks : [{ id: "text-empty", layers: [] }];
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="timeline">
       <div className="flex shrink-0 items-center justify-end gap-1 px-3 py-1">
@@ -183,10 +194,10 @@ export function Timeline({ project, player }: { project: Project; player: Player
         </TimelineButton>
       </div>
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
         <div className="relative" style={{ width: contentWidth + LABEL_WIDTH }}>
           {/* Ruler */}
-          <div className="sticky top-0 flex h-6">
+          <div className="sticky top-0 z-30 flex h-6 bg-background">
             <div className="sticky left-0 z-20 shrink-0 bg-background" style={{ width: LABEL_WIDTH }} />
             <div
               className="relative flex-1 cursor-text border-b"
@@ -330,6 +341,111 @@ export function Timeline({ project, player }: { project: Project; player: Player
             })}
           </Row>
 
+          {textTracks.map((track, index) => (
+            <Row
+              key={track.id}
+              label={index === 0 ? "Text" : ""}
+              action={
+                index === 0 ? (
+                  <button
+                    type="button"
+                    aria-label="Add text at playhead"
+                    aria-keyshortcuts="T"
+                    title="Add text at playhead (T)"
+                    onClick={() => addTextAt(time)}
+                    className="rounded p-0.5 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <PlusIcon className="size-3.5" />
+                  </button>
+                ) : undefined
+              }
+            >
+              <div
+                className="absolute inset-0"
+                onPointerDown={scrubFrom}
+                onDoubleClick={(e) => addTextAt(toTime(e.clientX - e.currentTarget.getBoundingClientRect().left))}
+              />
+              {track.layers.map((layer) => (
+                <Block
+                  key={layer.id}
+                  left={toPx(layer.start)}
+                  width={Math.max(4, toPx(layer.end - layer.start))}
+                  selected={selection?.kind === "text" && selection.id === layer.id}
+                  className="bg-amber-500/25 ring-amber-400/60"
+                  label={`Text ${layer.text.slice(0, 40)}, ${formatTime(layer.start)} to ${formatTime(layer.end)}`}
+                  testId="timeline-text"
+                  onSelect={() => select({ kind: "text", id: layer.id })}
+                  onBody={(e) => {
+                    const key = `move-text-${++dragSessions}`;
+                    const origin = layer.start;
+                    const length = layer.end - layer.start;
+                    const points = snapPoints(layer.id);
+                    beginDrag(e, {
+                      onClick: () => select({ kind: "text", id: layer.id }),
+                      onMove: (dx) => {
+                        const raw = origin + toTime(dx);
+                        const a = snap(raw, points, threshold);
+                        const b = snap(raw + length, points, threshold);
+                        const start = a.distance <= b.distance ? a.t : b.t - length;
+                        select({ kind: "text", id: layer.id });
+                        commit((d) => moveText(d, layer.id, start), { coalesce: key });
+                      },
+                    });
+                  }}
+                  onEdge={(edge, e) => {
+                    const key = `trim-text-${++dragSessions}`;
+                    const origin = edge === "start" ? layer.start : layer.end;
+                    const points = snapPoints(layer.id);
+                    beginDrag(e, {
+                      onMove: (dx) => {
+                        const t = snap(origin + toTime(dx), points, threshold).t;
+                        select({ kind: "text", id: layer.id });
+                        commit((d) => updateText(d, layer.id, edge === "start" ? { start: t } : { end: t }), {
+                          coalesce: key,
+                        });
+                      },
+                    });
+                  }}
+                >
+                  <span className="truncate">{layer.text || "Empty text"}</span>
+                </Block>
+              ))}
+            </Row>
+          ))}
+
+          <Row label="Taps">
+            <div className="absolute inset-0" onPointerDown={scrubFrom} />
+            {project.gestures.map((gesture) => (
+              <Block
+                key={gesture.id}
+                left={toPx(gesture.time)}
+                width={Math.max(12, toPx(GESTURE_DURATION))}
+                selected={selection?.kind === "gesture" && selection.id === gesture.id}
+                className="bg-emerald-500/25 ring-emerald-400/60"
+                label={`${gesture.type === "tap" ? "Tap" : "Swipe"} at ${formatTime(gesture.time)}`}
+                testId="timeline-gesture"
+                resizable={false}
+                onSelect={() => select({ kind: "gesture", id: gesture.id })}
+                onBody={(e) => {
+                  const key = `move-gesture-${++dragSessions}`;
+                  const origin = gesture.time;
+                  const points = snapPoints(gesture.id);
+                  beginDrag(e, {
+                    onClick: () => select({ kind: "gesture", id: gesture.id }),
+                    onMove: (dx) => {
+                      const t = snap(origin + toTime(dx), points, threshold).t;
+                      select({ kind: "gesture", id: gesture.id });
+                      commit((d) => updateGesture(d, gesture.id, { time: t }), { coalesce: key });
+                    },
+                  });
+                }}
+                onEdge={() => {}}
+              >
+                <span className="sr-only">{gesture.type}</span>
+              </Block>
+            ))}
+          </Row>
+
           {/* Playhead */}
           <div
             className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-red-500"
@@ -369,8 +485,10 @@ function Block(props: {
   onSelect: () => void;
   onBody: (e: ReactPointerEvent) => void;
   onEdge: (edge: "start" | "end", e: ReactPointerEvent) => void;
+  resizable?: boolean;
   children: ReactNode;
 }) {
+  const resizable = props.resizable ?? true;
   return (
     <div
       role="button"
@@ -389,17 +507,21 @@ function Block(props: {
       )}
       style={{ left: props.left, width: props.width }}
     >
-      <div
-        className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-foreground/40"
-        data-edge="start"
-        onPointerDown={(e) => props.onEdge("start", e)}
-      />
+      {resizable && (
+        <div
+          className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-foreground/40"
+          data-edge="start"
+          onPointerDown={(e) => props.onEdge("start", e)}
+        />
+      )}
       {props.children}
-      <div
-        className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize hover:bg-foreground/40"
-        data-edge="end"
-        onPointerDown={(e) => props.onEdge("end", e)}
-      />
+      {resizable && (
+        <div
+          className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize hover:bg-foreground/40"
+          data-edge="end"
+          onPointerDown={(e) => props.onEdge("end", e)}
+        />
+      )}
     </div>
   );
 }

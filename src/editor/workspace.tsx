@@ -15,9 +15,12 @@ import { useProjectStore } from "@/store/project-store";
 import { BackgroundsRail } from "./backgrounds-rail";
 import { ACCEPT_ATTRIBUTE, ImportError, importAsset } from "./import/import-video";
 import { ClipPanel } from "./inspector/clip-panel";
+import { GesturePanel } from "./inspector/gesture-panel";
+import { TextPanel } from "./inspector/text-panel";
 import { ExportPanel } from "./inspector/export-panel";
 import { StylePanel } from "./inspector/style-panel";
 import { ZoomPanel } from "./inspector/zoom-panel";
+import { PresetsRail } from "./presets-rail";
 import { PreviewCanvas } from "./preview/preview-canvas";
 import { usePlayer } from "./preview/use-player";
 import { Timeline } from "./timeline/timeline";
@@ -59,14 +62,15 @@ export function EditorWorkspace({ projectId }: { projectId: string }) {
   return <Workspace project={loaded} />;
 }
 
-type InspectorTab = "style" | "clip" | "zoom" | "export";
-const TABS: InspectorTab[] = ["style", "clip", "zoom", "export"];
+type InspectorTab = "style" | "edit" | "export";
+const EDIT_LABELS = { clip: "Clip", zoom: "Zoom", text: "Text", gesture: "Tap" } as const;
 
 function Workspace({ project }: { project: Project }) {
   const { player, frames, error } = usePlayer(project);
   const autosave = useAutosave(project);
   const [tab, setTab] = useState<InspectorTab>("style");
   const selection = useEditorStore((s) => s.selection);
+  const gestureTool = useEditorStore((s) => s.gestureTool);
   const canUndo = useProjectStore((s) => s.past.length > 0);
   const canRedo = useProjectStore((s) => s.future.length > 0);
   useEditorShortcuts(player);
@@ -75,11 +79,17 @@ function Workspace({ project }: { project: Project }) {
   const [lastSelection, setLastSelection] = useState(selection);
   if (selection !== lastSelection) {
     setLastSelection(selection);
-    if (selection) setTab(selection.kind);
+    if (selection) setTab("edit");
+  }
+  const [lastTool, setLastTool] = useState(gestureTool);
+  if (gestureTool !== lastTool) {
+    setLastTool(gestureTool);
+    if (gestureTool) setTab("edit");
   }
 
   // Keep the player in step with timing edits, including undo and redo.
   const timing = JSON.stringify([project.videoTracks, project.zooms]);
+
   useEffect(() => {
     player?.projectChanged();
   }, [player, timing]);
@@ -120,7 +130,8 @@ function Workspace({ project }: { project: Project }) {
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="w-64 shrink-0 overflow-y-auto border-r p-4">
+        <aside className="w-64 shrink-0 space-y-8 overflow-y-auto border-r p-4">
+          <PresetsRail />
           <BackgroundsRail />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
@@ -135,7 +146,7 @@ function Workspace({ project }: { project: Project }) {
               </p>
             )}
           </section>
-          <section aria-label="Timeline" className="flex h-64 shrink-0 flex-col border-t">
+          <section aria-label="Timeline" className="flex h-80 shrink-0 flex-col border-t">
             <Transport project={project} player={player} />
             <div className="min-h-0 flex-1">
               <Timeline project={project} player={player} />
@@ -144,7 +155,7 @@ function Workspace({ project }: { project: Project }) {
         </main>
         <aside aria-label="Inspector" className="flex w-80 shrink-0 flex-col border-l">
           <div role="tablist" aria-label="Inspector panels" className="flex shrink-0 gap-1 border-b px-3 pt-3">
-            {TABS.map((id) => (
+            {(["style", "edit", "export"] as const).map((id) => (
               <button
                 key={id}
                 id={`tab-${id}`}
@@ -158,18 +169,47 @@ function Workspace({ project }: { project: Project }) {
                   tab === id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
                 )}
               >
-                {id}
+                {id === "edit" ? (selection ? EDIT_LABELS[selection.kind] : gestureTool ? "Tap" : "Edit") : id}
               </button>
             ))}
           </div>
           <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex-1 overflow-y-auto p-4">
             {tab === "style" && <StylePanel />}
-            {tab === "clip" && <ClipPanel project={project} player={player} />}
-            {tab === "zoom" && <ZoomPanel project={project} />}
+            {tab === "edit" && (
+              <>
+                {selection?.kind === "clip" && <ClipPanel project={project} player={player} />}
+                {selection?.kind === "zoom" && <ZoomPanel project={project} />}
+                {selection?.kind === "text" && <TextPanel project={project} />}
+                {(selection?.kind === "gesture" || (!selection && gestureTool)) && <GesturePanel project={project} />}
+                {!selection && !gestureTool && <EditHelp />}
+              </>
+            )}
             {tab === "export" && <ExportPanel project={project} />}
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function EditHelp() {
+  return (
+    <div className="space-y-3 text-sm text-muted-foreground">
+      <p>Select something in the timeline to edit it, or add:</p>
+      <ul className="space-y-1.5">
+        <li>
+          <kbd className="rounded border px-1 font-mono text-xs">Z</kbd> a zoom at the playhead
+        </li>
+        <li>
+          <kbd className="rounded border px-1 font-mono text-xs">T</kbd> text at the playhead
+        </li>
+        <li>
+          <kbd className="rounded border px-1 font-mono text-xs">G</kbd> the tap tool, then click or drag the preview
+        </li>
+        <li>
+          <kbd className="rounded border px-1 font-mono text-xs">S</kbd> split the clip at the playhead
+        </li>
+      </ul>
     </div>
   );
 }
