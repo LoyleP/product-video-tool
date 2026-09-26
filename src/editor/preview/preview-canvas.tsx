@@ -160,7 +160,7 @@ export function PreviewCanvas({ project: editedProject, frames, player }: Props)
         <canvas
           ref={canvasRef}
           data-testid="preview-canvas"
-          aria-label={gestureTool ? "Video preview. Click to add a tap, drag to add a swipe." : "Video preview"}
+          aria-label="Video preview"
           role="img"
           style={{ width: cssWidth, height: cssHeight }}
           className={gestureTool ? "cursor-crosshair rounded-sm" : "rounded-sm"}

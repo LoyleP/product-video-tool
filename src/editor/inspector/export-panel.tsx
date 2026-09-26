@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ExportSettings, Project } from "@/schema/project";
 import { useProjectStore } from "@/store/project-store";
 import { downloadFile } from "../export/run-export";
+import { NumberField } from "./fields";
 import { useExport, type ExportStatus } from "../export/use-export";
 
 const PRESETS = [
@@ -46,6 +47,7 @@ function usePresetSupport(project: Project): Partial<Record<Preset, boolean>> {
 export function ExportPanel({ project }: { project: Project }) {
   const setExportPreset = useProjectStore((s) => s.setExportPreset);
   const setExportFps = useProjectStore((s) => s.setExportFps);
+  const setExportDimension = useProjectStore((s) => s.setExportDimension);
   const support = usePresetSupport(project);
   const { status, start, cancel } = useExport(project);
   const busy = status.kind === "preparing" || status.kind === "mixing-audio" || status.kind === "encoding";
@@ -81,6 +83,26 @@ export function ExportPanel({ project }: { project: Project }) {
             );
           })}
         </div>
+        <NumberField
+          label="Width"
+          value={project.export.width}
+          min={2}
+          max={7680}
+          step={2}
+          unit="px"
+          slider={false}
+          onChange={(v) => setExportDimension("width", v)}
+        />
+        <NumberField
+          label="Height"
+          value={project.export.height}
+          min={2}
+          max={4320}
+          step={2}
+          unit="px"
+          slider={false}
+          onChange={(v) => setExportDimension("height", v)}
+        />
       </section>
 
       <section className="space-y-3">

@@ -65,10 +65,7 @@ export function ImportScreen() {
         )}
       >
         <UploadIcon className="size-8 text-muted-foreground" aria-hidden />
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Drop a screen recording</h1>
-          <p className="text-sm text-muted-foreground">MP4, MOV or WebM. The file stays on your computer.</p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Drop a screen recording</h1>
         <Button onClick={() => inputRef.current?.click()} disabled={status.kind === "importing"}>
           {status.kind === "importing" ? `Importing ${status.name}…` : "Choose a video"}
         </Button>

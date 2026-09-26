@@ -244,8 +244,26 @@ test("text renders identically in preview and export", async ({ page }) => {
     for (let c = 0; c < 3; c++) diff += Math.abs(raw[i + c]! - preview.data[i + c]!);
   }
   const overlap = both / either;
+
+  // The same comparison with the export shifted 12 px sideways must score far lower, so a moved or resized
+  // text can't pass. (Row by row, in the band's own pixels.)
+  const rowWidth = preview.width;
+  let shiftedBoth = 0;
+  let shiftedEither = 0;
+  for (let y = 0; y < preview.h; y++) {
+    for (let x = 0; x < rowWidth - 12; x++) {
+      const pi = (y * rowWidth + x) * 4;
+      const ei = (y * rowWidth + x + 12) * 4;
+      const p = white(preview.data, pi);
+      const e = white(raw, ei);
+      if (p && e) shiftedBoth++;
+      if (p || e) shiftedEither++;
+    }
+  }
+  expect(shiftedBoth / shiftedEither).toBeLessThan(overlap - 0.2);
   const meanDiff = diff / ((raw.length / 4) * 3);
   expect(previewText).toBeGreaterThan(500); // the band really contains text
-  expect(overlap).toBeGreaterThan(0.8);
+  // Anti-aliased edges resample differently at different preview sizes, so this is not exactly 1.
+  expect(overlap).toBeGreaterThan(0.75);
   expect(meanDiff).toBeLessThan(10); // whole band, including compressed video
 });

@@ -128,3 +128,11 @@
     @apply font-sans;
   }
 }
+/* Scrollable areas that scroll without showing a scrollbar. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

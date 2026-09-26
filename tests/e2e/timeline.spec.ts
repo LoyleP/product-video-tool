@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { openLeftPanel } from "./helpers";
 
 const fixture = (name: string) => path.join(__dirname, "..", "fixtures", name);
 
@@ -60,6 +61,7 @@ test("clip speed changes the duration and can be undone", async ({ page }) => {
 
 test("Z adds a zoom that visibly zooms the preview", async ({ page }) => {
   await importFixture(page);
+  await openLeftPanel(page, "Backgrounds");
   await page.getByRole("button", { name: "Paper", exact: true }).click();
   // With padding, the top-left corner is background.
   await expect.poll(() => pixel(page, 0.02, 0.02)).toEqual([250, 250, 250, 255]);

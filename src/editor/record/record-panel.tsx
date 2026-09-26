@@ -190,8 +190,7 @@ function RecordSetup({
     <section aria-label="Recording setup" className="w-full max-w-2xl space-y-5 rounded-2xl border p-6">
       <h2 className="text-base font-semibold">Record your screen</h2>
       {devices && !devices.labeled && (devices.microphones.length > 0 || devices.cameras.length > 0) && (
-        <div className="flex items-center justify-between gap-4 rounded-md bg-muted/50 px-3 py-2 text-sm">
-          <span className="text-muted-foreground">Allow access to name your microphone and camera.</span>
+        <div className="flex justify-end">
           <Button size="sm" variant="secondary" onClick={() => void allowAccess()}>
             Allow access
           </Button>
@@ -242,13 +241,9 @@ function RecordSetup({
         <Label htmlFor={sysId}>Tab or system audio</Label>
         <label className="flex items-center gap-2 text-muted-foreground">
           <input id={sysId} type="checkbox" checked={systemAudio} disabled={busy} onChange={(e) => setSystemAudio(e.target.checked)} />
-          Include when the browser offers it
+          On
         </label>
       </div>
-      <p className="text-xs text-muted-foreground">
-        The browser asks which screen, window or tab to share. The recording stays on this computer. Web pages can&apos;t
-        see the cursor position, so the cursor is recorded as part of the picture.
-      </p>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel} disabled={busy}>
           Cancel
@@ -309,7 +304,6 @@ function RecordingView({ recorder, onStop }: { recorder: Recorder; onStop: () =>
         <SquareIcon className="fill-current" />
         Stop and edit
       </Button>
-      <p className="text-xs text-muted-foreground">You can also stop from the browser&apos;s sharing bar.</p>
     </section>
   );
 }

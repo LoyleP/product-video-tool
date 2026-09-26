@@ -32,6 +32,8 @@ interface ProjectState {
   setBackground: (background: Background) => void;
   setExportPreset: (preset: Exclude<ExportSettings["preset"], "custom">) => void;
   setExportFps: (fps: ExportSettings["fps"]) => void;
+  /** Sets a custom export size from one side, keeping the canvas aspect ratio with even dimensions. */
+  setExportDimension: (axis: "width" | "height", pixels: number) => void;
 }
 
 export const useProjectStore = create<ProjectState>()((set, get) => ({
@@ -97,6 +99,19 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       p.export.preset = preset;
       p.export.width = size.width;
       p.export.height = size.height;
+    });
+  },
+  setExportDimension: (axis, pixels) => {
+    get().commit((p) => {
+      const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+      const aspect = p.canvas.width / p.canvas.height;
+      const side = even(pixels);
+      const width = axis === "width" ? side : even(side * aspect);
+      const height = axis === "height" ? side : even(side / aspect);
+      if (p.export.width === width && p.export.height === height && p.export.preset === "custom") return false;
+      p.export.preset = "custom";
+      p.export.width = width;
+      p.export.height = height;
     });
   },
   setExportFps: (fps) => {

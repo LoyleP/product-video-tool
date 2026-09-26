@@ -2,13 +2,13 @@
 
 import { Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { formatTime } from "@/lib/format-time";
-import { cn } from "@/lib/utils";
 import type { Gesture, Project } from "@/schema/project";
 import { deleteGesture, updateGesture } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
+import { Choice, NumberField, Section } from "./fields";
+import { fromSeconds, recordingSize, toSeconds } from "./units";
 
 export function GesturePanel({ project }: { project: Project }) {
   const selection = useEditorStore((s) => s.selection);
@@ -30,57 +30,88 @@ export function GesturePanel({ project }: { project: Project }) {
     </Button>
   );
 
-  if (!gesture) {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Turn on the tap tool (G), then click the preview to add a tap at the playhead or drag to add a swipe.
-        </p>
-        {toolToggle}
-      </div>
-    );
-  }
+  if (!gesture) return <div className="space-y-4">{toolToggle}</div>;
 
-  const choice = <K extends "type" | "style">(key: K, options: [Gesture[K], string][]) => (
-    <div role="radiogroup" aria-label={key === "type" ? "Gesture type" : "Gesture style"} className="grid grid-cols-2 gap-1">
-      {options.map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          role="radio"
-          aria-checked={gesture[key] === value}
-          onClick={() => commit((d) => updateGesture(d, gesture.id, { [key]: value }))}
-          className={cn(
-            "rounded-md border px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            gesture[key] === value ? "border-foreground/60 bg-muted" : "text-muted-foreground hover:bg-muted/50",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+  const size = recordingSize(project);
+  const set = (patch: Partial<Omit<Gesture, "id">>, key?: string) =>
+    commit((d) => updateGesture(d, gesture.id, patch), key ? { coalesce: `${key}-${gesture.id}` } : undefined);
+  const to = gesture.to;
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <section className="space-y-1">
         <h2 className="text-sm font-medium">{gesture.type === "tap" ? "Tap" : "Swipe"}</h2>
-        <p className="font-mono text-xs text-muted-foreground">at {formatTime(gesture.time)}</p>
+        <p className="font-mono text-xs text-muted-foreground">{formatTime(gesture.time)}</p>
       </section>
-      <section className="space-y-2">
-        <Label>Type</Label>
-        {choice("type", [
-          ["tap", "Tap"],
-          ["swipe", "Swipe"],
-        ])}
-      </section>
-      <section className="space-y-2">
-        <Label>Style</Label>
-        {choice("style", [
-          ["ripple", "Ripple"],
-          ["dot", "Dot"],
-        ])}
-      </section>
+
+      <Choice
+        label="Gesture type"
+        value={gesture.type}
+        options={[
+          { value: "tap", label: "Tap" },
+          { value: "swipe", label: "Swipe" },
+        ]}
+        onChange={(type) => set({ type })}
+      />
+      <Choice
+        label="Gesture style"
+        value={gesture.style}
+        options={[
+          { value: "ripple", label: "Ripple" },
+          { value: "dot", label: "Dot" },
+        ]}
+        onChange={(style) => set({ style })}
+      />
+
+      <Section title="Position">
+        <NumberField
+          label="Time"
+          value={toSeconds(gesture.time)}
+          min={0}
+          max={Math.max(60, toSeconds(gesture.time))}
+          step={0.01}
+          unit="s"
+          slider={false}
+          onChange={(v) => set({ time: fromSeconds(v) }, "time")}
+        />
+        <NumberField
+          label="From X"
+          value={Math.round(gesture.from.x * size.width)}
+          min={0}
+          max={size.width}
+          unit="px"
+          onChange={(v) => set({ from: { ...gesture.from, x: v / size.width } }, "from-x")}
+        />
+        <NumberField
+          label="From Y"
+          value={Math.round(gesture.from.y * size.height)}
+          min={0}
+          max={size.height}
+          unit="px"
+          onChange={(v) => set({ from: { ...gesture.from, y: v / size.height } }, "from-y")}
+        />
+        {gesture.type === "swipe" && to && (
+          <>
+            <NumberField
+              label="To X"
+              value={Math.round(to.x * size.width)}
+              min={0}
+              max={size.width}
+              unit="px"
+              onChange={(v) => set({ to: { ...to, x: v / size.width } }, "to-x")}
+            />
+            <NumberField
+              label="To Y"
+              value={Math.round(to.y * size.height)}
+              min={0}
+              max={size.height}
+              unit="px"
+              onChange={(v) => set({ to: { ...to, y: v / size.height } }, "to-y")}
+            />
+          </>
+        )}
+      </Section>
+
       <div className="flex flex-wrap gap-2">
         {toolToggle}
         <Button

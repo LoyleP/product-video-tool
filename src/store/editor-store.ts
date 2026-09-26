@@ -13,7 +13,12 @@ interface EditorState {
   /** When on, clicking the preview adds a tap and dragging adds a swipe at the playhead. */
   gestureTool: boolean;
   setGestureTool: (on: boolean) => void;
+  /** Which panel is open next to the left icon bar, if any. */
+  leftPanel: LeftPanelId | null;
+  setLeftPanel: (panel: LeftPanelId | null) => void;
 }
+
+export type LeftPanelId = "presets" | "backgrounds";
 
 export const MIN_PX_PER_SECOND = 10;
 export const MAX_PX_PER_SECOND = 800;
@@ -26,4 +31,6 @@ export const useEditorStore = create<EditorState>()((set) => ({
     set({ pxPerSecond: Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) }),
   gestureTool: false,
   setGestureTool: (gestureTool) => set({ gestureTool }),
+  leftPanel: "presets",
+  setLeftPanel: (leftPanel) => set({ leftPanel }),
 }));

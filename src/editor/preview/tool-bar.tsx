@@ -77,7 +77,7 @@ export function ToolBar({ project, player }: { project: Project; player: Player 
           type="button"
           onClick={tool.run}
           aria-keyshortcuts={"shortcut" in tool ? tool.shortcut : undefined}
-          title={"shortcut" in tool ? `${tool.label} (${tool.shortcut})` : tool.label}
+          title={tool.label}
           className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           <tool.icon className="size-3.5" aria-hidden />
@@ -88,7 +88,7 @@ export function ToolBar({ project, player }: { project: Project; player: Player 
         type="button"
         aria-pressed={gestureTool}
         aria-keyshortcuts="G"
-        title="Taps and swipes (G)"
+        title="Taps"
         onClick={() => setGestureTool(!gestureTool)}
         className={cn(
           "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",

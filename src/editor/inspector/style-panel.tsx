@@ -1,22 +1,22 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { cn } from "@/lib/utils";
 import { DEVICE_IDS, DEVICES, suggestDevice, type DeviceId } from "@/engine/devices";
+import { cn } from "@/lib/utils";
 import type { Background } from "@/schema/project";
 import { useProjectStore } from "@/store/project-store";
+import { ColorField, NumberField, Section } from "./fields";
+import { maxPaddingPx, paddingToPx, pxToPadding } from "./units";
 
 export function StylePanel() {
   const style = useProjectStore((s) => s.project?.style);
+  const canvas = useProjectStore((s) => s.project?.canvas);
   const firstAsset = useProjectStore((s) => {
     const clip = s.project?.videoTracks[0]?.clips[0];
     return clip ? s.project!.assets[clip.assetId] : undefined;
   });
   const updateStyle = useProjectStore((s) => s.updateStyle);
   const setBackground = useProjectStore((s) => s.setBackground);
-  if (!style) return null;
+  if (!style || !canvas) return null;
 
   const bg = style.background;
 
@@ -66,12 +66,12 @@ export function StylePanel() {
                 }
               />
             ))}
-            <SliderField
+            <NumberField
               label="Angle"
               value={bg.angle}
               min={0}
               max={360}
-              format={(v) => `${v}°`}
+              unit="°"
               onChange={(v) =>
                 updateStyle(
                   (s) => {
@@ -92,61 +92,67 @@ export function StylePanel() {
       />
 
       <Section title="Layout">
-        <SliderField
+        <NumberField
           label="Padding"
-          value={Math.round(style.padding * 100)}
+          value={paddingToPx(style.padding, canvas)}
           min={0}
-          max={30}
-          format={(v) => `${v}%`}
-          onChange={(v) => updateStyle((s) => void (s.padding = v / 100), { coalesce: "padding" })}
+          max={Math.round(maxPaddingPx(canvas) * 0.6)}
+          inputMax={maxPaddingPx(canvas)}
+          unit="px"
+          onChange={(v) => updateStyle((s) => void (s.padding = pxToPadding(v, canvas)), { coalesce: "padding" })}
         />
         {/* A device frame sets its own screen corners. */}
         {!style.device && (
-          <SliderField
+          <NumberField
             label="Corner radius"
             value={style.cornerRadius}
             min={0}
             max={120}
-            format={(v) => `${v}px`}
+            inputMax={1000}
+            unit="px"
             onChange={(v) => updateStyle((s) => void (s.cornerRadius = v), { coalesce: "cornerRadius" })}
           />
         )}
       </Section>
 
       <Section title="Zoom">
-        <SliderField
+        <NumberField
           label="Background blur"
           value={style.zoomBackgroundBlur}
           min={0}
           max={40}
-          format={(v) => (v === 0 ? "off" : `${v}px`)}
+          inputMax={200}
+          unit="px"
           onChange={(v) => updateStyle((s) => void (s.zoomBackgroundBlur = v), { coalesce: "zoomBackgroundBlur" })}
         />
       </Section>
 
       <Section title="Shadow">
-        <SliderField
+        <NumberField
           label="Blur"
           value={style.shadow.blur}
           min={0}
           max={200}
-          format={(v) => `${v}px`}
+          inputMax={1000}
+          unit="px"
           onChange={(v) => updateStyle((s) => void (s.shadow.blur = v), { coalesce: "shadow.blur" })}
         />
-        <SliderField
+        <NumberField
           label="Offset"
           value={style.shadow.offsetY}
           min={0}
           max={100}
-          format={(v) => `${v}px`}
+          inputMin={-500}
+          inputMax={500}
+          unit="px"
           onChange={(v) => updateStyle((s) => void (s.shadow.offsetY = v), { coalesce: "shadow.offsetY" })}
         />
-        <SliderField
+        <NumberField
           label="Opacity"
           value={Math.round(style.shadow.opacity * 100)}
           min={0}
           max={100}
-          format={(v) => `${v}%`}
+          unit="%"
           onChange={(v) => updateStyle((s) => void (s.shadow.opacity = v / 100), { coalesce: "shadow.opacity" })}
         />
       </Section>
@@ -224,58 +230,3 @@ function convertBackground(bg: Background, type: "solid" | "gradient"): Backgrou
     : { type: "gradient", angle: 135, stops: [{ color: base, at: 0 }, { color: "#0a0a0a", at: 1 }] };
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="space-y-4">
-      <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function SliderField(props: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  format: (v: number) => string;
-  onChange: (v: number) => void;
-}) {
-  const id = useId();
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <Label id={id}>{props.label}</Label>
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">{props.format(props.value)}</span>
-      </div>
-      <Slider
-        aria-labelledby={id}
-        thumbLabel={props.label}
-        value={[props.value]}
-        min={props.min}
-        max={props.max}
-        step={1}
-        onValueChange={([v]) => v !== undefined && props.onChange(v)}
-      />
-    </div>
-  );
-}
-
-function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  const id = useId();
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-muted-foreground uppercase">{value}</span>
-        <input
-          id={id}
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-7 w-9 cursor-pointer rounded border bg-transparent p-0.5"
-        />
-      </div>
-    </div>
-  );
-}

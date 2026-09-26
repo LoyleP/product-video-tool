@@ -4,6 +4,19 @@ import type { Rect } from "../geometry";
 import type { Micros } from "../time";
 import type { MediaPlacement } from "./media";
 
+/** Blur radius in canvas px for the stored 0..1 strength: 4 px at 0 up to 30 px at 1. */
+export const BLUR_MIN_PX = 4;
+export const BLUR_MAX_PX = 30;
+export const blurRadiusPx = (intensity: number) => BLUR_MIN_PX + (BLUR_MAX_PX - BLUR_MIN_PX) * intensity;
+export const intensityFromBlurPx = (px: number) =>
+  Math.min(1, Math.max(0, (px - BLUR_MIN_PX) / (BLUR_MAX_PX - BLUR_MIN_PX)));
+
+/** How dark a spotlight dims the recording outside its box: 20% at strength 0 up to 80% at 1. */
+export const DIM_MIN = 0.2;
+export const DIM_MAX = 0.8;
+export const dimAmount = (intensity: number) => DIM_MIN + (DIM_MAX - DIM_MIN) * intensity;
+export const intensityFromDim = (dim: number) => Math.min(1, Math.max(0, (dim - DIM_MIN) / (DIM_MAX - DIM_MIN)));
+
 /** Effects fade in and out over this long. */
 export const EFFECT_FADE: Micros = 250_000;
 /** Corner radius of effect boxes, in canvas units. */
@@ -51,13 +64,13 @@ export function drawEffects(
       ctx.beginPath();
       ctx.roundRect(screen.x, screen.y, screen.w, screen.h, radii);
       ctx.roundRect(box.x, box.y, box.w, box.h, r);
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.2 + 0.6 * effect.intensity})`;
+      ctx.fillStyle = `rgba(0, 0, 0, ${dimAmount(effect.intensity)})`;
       ctx.fill("evenodd");
     } else if (frame) {
       ctx.beginPath();
       ctx.roundRect(box.x, box.y, box.w, box.h, r);
       ctx.clip();
-      ctx.filter = `blur(${(4 + 26 * effect.intensity) * pixelScale}px)`;
+      ctx.filter = `blur(${blurRadiusPx(effect.intensity) * pixelScale}px)`;
       frame.draw(ctx, placement.draw.x, placement.draw.y, placement.draw.w, placement.draw.h);
     }
     ctx.restore();

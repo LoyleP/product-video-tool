@@ -31,7 +31,7 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
   await page.mouse.up();
 }
 
-const scale = async (page: Page) => Number(await page.getByRole("slider", { name: "Zoom scale" }).getAttribute("aria-valuenow")) / 10;
+const scale = async (page: Page) => Number(await page.getByRole("slider", { name: "Zoom scale" }).getAttribute("aria-valuenow"));
 
 test("drawing a box on the preview sets where and how far a zoom goes, in one undo step", async ({ page }) => {
   await importFixture(page);
@@ -43,8 +43,9 @@ test("drawing a box on the preview sets where and how far a zoom goes, in one un
   const c = (await page.getByTestId("preview-canvas").boundingBox())!;
   await drag(page, { x: c.x + c.width * 0.05, y: c.y + c.height * 0.1 }, { x: c.x + c.width * 0.3, y: c.y + c.height * 0.2 });
   await expect.poll(() => scale(page)).toBeGreaterThan(3);
+  // Focus is in the recording's pixels (the fixture is 1280 wide): the box was drawn left of a third.
   const focusX = Number(await page.getByRole("slider", { name: "Focus horizontal" }).getAttribute("aria-valuenow"));
-  expect(focusX).toBeLessThan(35);
+  expect(focusX).toBeLessThan(1280 * 0.35);
 
   // One drag is one undo step.
   await page.getByRole("button", { name: "Undo" }).click();

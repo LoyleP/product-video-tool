@@ -103,3 +103,23 @@ describe("undo and redo", () => {
     expect(state().project!.export).toMatchObject({ preset: "4k", width: 3840, height: 2160 });
   });
 });
+
+describe("custom export size", () => {
+  beforeEach(() => state().setProject(null));
+
+  it("keeps the canvas aspect ratio with even dimensions", () => {
+    load();
+    state().setExportDimension("width", 1281);
+    expect(state().project!.export).toMatchObject({ preset: "custom", width: 1282, height: 722 });
+    state().setExportDimension("height", 1000);
+    expect(state().project!.export).toMatchObject({ preset: "custom", width: 1778, height: 1000 });
+  });
+
+  it("does not add an undo step when nothing changes", () => {
+    load();
+    state().setExportDimension("width", 1000);
+    const steps = state().past.length;
+    state().setExportDimension("width", 1000);
+    expect(state().past.length).toBe(steps);
+  });
+});

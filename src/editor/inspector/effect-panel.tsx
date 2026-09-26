@@ -2,14 +2,14 @@
 
 import { Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
+import { blurRadiusPx, dimAmount, intensityFromBlurPx, intensityFromDim } from "@/engine/layers/effects";
 import { formatTime } from "@/lib/format-time";
-import { cn } from "@/lib/utils";
-import type { Project } from "@/schema/project";
+import type { Effect, Project } from "@/schema/project";
 import { deleteEffect, updateEffect } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
+import { Choice, NumberField, Section } from "./fields";
+import { fromSeconds, recordingSize, toSeconds } from "./units";
 
 export function EffectPanel({ project }: { project: Project }) {
   const selection = useEditorStore((s) => s.selection);
@@ -18,59 +18,114 @@ export function EffectPanel({ project }: { project: Project }) {
   const effect = selection?.kind === "effect" ? project.effects.find((e) => e.id === selection.id) : undefined;
   if (!effect) return null;
 
+  const size = recordingSize(project);
+  const set = (patch: Partial<Omit<Effect, "id">>, key?: string) =>
+    commit((d) => updateEffect(d, effect.id, patch), key ? { coalesce: `${key}-${effect.id}` } : undefined);
+  const setRect = (patch: Partial<Effect["rect"]>, key: string) => set({ rect: { ...effect.rect, ...patch } }, key);
+  const projectSeconds = Math.max(toSeconds(effect.end), 60);
+  const px = (fraction: number, of: number) => Math.round(fraction * of);
+
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <section className="space-y-1">
         <h2 className="text-sm font-medium">{effect.type === "spotlight" ? "Spotlight" : "Blur"}</h2>
         <p className="font-mono text-xs text-muted-foreground">
           {formatTime(effect.start)} – {formatTime(effect.end)}
         </p>
-        <p className="text-xs text-muted-foreground">
-          Draw or drag the box on the preview.{" "}
-          {effect.type === "spotlight" ? "Everything outside it is dimmed." : "Everything inside it is blurred."}
-        </p>
       </section>
-      <section className="space-y-2">
-        <Label>Type</Label>
-        <div role="radiogroup" aria-label="Effect type" className="grid grid-cols-2 gap-1">
-          {(["spotlight", "blur"] as const).map((type) => (
-            <button
-              key={type}
-              type="button"
-              role="radio"
-              aria-checked={effect.type === type}
-              onClick={() => commit((d) => updateEffect(d, effect.id, { type }))}
-              className={cn(
-                "rounded-md border px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                effect.type === type ? "border-foreground/60 bg-muted" : "text-muted-foreground hover:bg-muted/50",
-              )}
-            >
-              {type === "spotlight" ? "Spotlight" : "Blur"}
-            </button>
-          ))}
-        </div>
-      </section>
-      <section className="space-y-3">
-        <div className="flex items-center justify-between text-sm">
-          <Label>Strength</Label>
-          <span className="font-mono text-xs text-muted-foreground tabular-nums">
-            {Math.round(effect.intensity * 100)}%
-          </span>
-        </div>
-        <Slider
-          thumbLabel="Effect strength"
+
+      <Choice
+        label="Effect type"
+        value={effect.type}
+        options={[
+          { value: "spotlight", label: "Spotlight" },
+          { value: "blur", label: "Blur" },
+        ]}
+        onChange={(type) => set({ type })}
+      />
+
+      <Section title={effect.type === "spotlight" ? "Dimming" : "Blur amount"}>
+        {effect.type === "blur" ? (
+          <NumberField
+            label="Blur radius"
+            value={Math.round(blurRadiusPx(effect.intensity))}
+            min={4}
+            max={30}
+            inputMax={100}
+            unit="px"
+            onChange={(v) => set({ intensity: intensityFromBlurPx(v) }, "strength")}
+          />
+        ) : (
+          <NumberField
+            label="Dimming"
+            value={Math.round(dimAmount(effect.intensity) * 100)}
+            min={20}
+            max={80}
+            inputMax={100}
+            unit="%"
+            onChange={(v) => set({ intensity: intensityFromDim(v / 100) }, "strength")}
+          />
+        )}
+      </Section>
+
+      <Section title="Area">
+        <NumberField
+          label="Area X"
+          value={px(effect.rect.x, size.width)}
           min={0}
-          max={100}
-          step={1}
-          value={[Math.round(effect.intensity * 100)]}
-          onValueChange={([v]) =>
-            v !== undefined &&
-            commit((d) => updateEffect(d, effect.id, { intensity: v / 100 }), {
-              coalesce: `effect-strength-${effect.id}`,
-            })
-          }
+          max={size.width}
+          unit="px"
+          onChange={(v) => setRect({ x: v / size.width }, "x")}
         />
-      </section>
+        <NumberField
+          label="Area Y"
+          value={px(effect.rect.y, size.height)}
+          min={0}
+          max={size.height}
+          unit="px"
+          onChange={(v) => setRect({ y: v / size.height }, "y")}
+        />
+        <NumberField
+          label="Area width"
+          value={px(effect.rect.w, size.width)}
+          min={1}
+          max={size.width}
+          unit="px"
+          onChange={(v) => setRect({ w: v / size.width }, "w")}
+        />
+        <NumberField
+          label="Area height"
+          value={px(effect.rect.h, size.height)}
+          min={1}
+          max={size.height}
+          unit="px"
+          onChange={(v) => setRect({ h: v / size.height }, "h")}
+        />
+      </Section>
+
+      <Section title="Timing">
+        <NumberField
+          label="Start"
+          value={toSeconds(effect.start)}
+          min={0}
+          max={projectSeconds}
+          step={0.01}
+          unit="s"
+          slider={false}
+          onChange={(v) => set({ start: fromSeconds(v) }, "start")}
+        />
+        <NumberField
+          label="End"
+          value={toSeconds(effect.end)}
+          min={0}
+          max={projectSeconds}
+          step={0.01}
+          unit="s"
+          slider={false}
+          onChange={(v) => set({ end: fromSeconds(v) }, "end")}
+        />
+      </Section>
+
       <Button
         variant="outline"
         size="sm"

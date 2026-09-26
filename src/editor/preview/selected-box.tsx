@@ -61,7 +61,7 @@ export function SelectedBox({
       <BoxEditor
         box={toCss(zoomBox(project.canvas, media, zoom))}
         aspect={aspect}
-        label={`Zoom ${zoom.scale}×. Drag to move, drag a corner to resize, drag outside to draw a new area.`}
+        label={`Zoom area ${zoom.scale}×`}
         onChange={(box, final) => {
           const next = zoomFromBox(project.canvas, media, toCanvas(box));
           commit((d) => updateZoom(d, zoom.id, next), { coalesce: key() });

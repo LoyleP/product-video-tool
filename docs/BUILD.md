@@ -379,11 +379,14 @@ Manual placement in Phase 4: user clicks on the preview at the playhead to add a
 
 Three-zone layout on desktop, minimum width 1280 px:
 
-- Left rail: presets and backgrounds gallery.
+- Left rail: a narrow icon bar with one button per menu (Presets, Backgrounds), and the chosen menu opening as a panel next to it, as in a code editor. Selecting the open menu again closes the panel.
 - Center: preview canvas with transport controls, and the timeline below it (tracks: video, zooms, gestures, text, captions, audio).
 - Right: inspector with contextual panels (Style, Zoom, Text, Gesture, Export).
 
 Interaction requirements:
+- No instruction text anywhere in the UI (no hints, help paragraphs or "how to" lines). Labels, values, and the error and status messages required by section 11 remain. The contextual inspector tab exists only while something is selected.
+- Every numeric value has a slider (where a range makes sense) and a typed input beside it, using px for lengths, seconds for time, degrees for angles and % for opacity and dimming. Enter or leaving the field applies it, values clamp to the allowed range, Escape restores, Up and Down step (10x with Shift). Padding, zoom focus, effect and tap positions are stored as fractions and converted for display. Colors take hex values.
+- The playhead has a grabbable handle in the ruler (also a keyboard slider) and a wider draggable line. The timeline scrolls without a scrollbar.
 - Keyboard: Space play and pause, J K L shuttle, S split at playhead, Z add zoom at playhead, T add text, Delete removes selection, Cmd or Ctrl plus Z and Shift plus Z for undo and redo.
 - Timeline: zoomable, snapping to playhead, clip edges and segment edges; drag to move, drag edges to trim.
 - Every mutation goes through a command in the store so undo and redo are always correct.

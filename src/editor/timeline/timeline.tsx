@@ -179,6 +179,54 @@ export function Timeline({ project, player }: { project: Project; player: Player
     el.addEventListener("pointerup", up);
   };
 
+  /**
+   * Drags the playhead from its handle or line. The grab point is kept, so nothing jumps when the drag starts,
+   * and the timeline scrolls when the pointer nears its edge.
+   */
+  const dragPlayhead = (e: ReactPointerEvent<HTMLElement>) => {
+    const scroller = scrollRef.current;
+    if (!player || !scroller || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    player.pause();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const box = scroller.getBoundingClientRect();
+    const playheadX = box.left + LABEL_WIDTH + toPx(time) - scroller.scrollLeft;
+    const grab = e.clientX - playheadX;
+    const move = (ev: PointerEvent) => {
+      const edge = 48;
+      const left = box.left + LABEL_WIDTH;
+      if (ev.clientX > box.right - edge) scroller.scrollLeft += Math.min(40, ev.clientX - (box.right - edge));
+      else if (ev.clientX < left + edge) scroller.scrollLeft -= Math.min(40, left + edge - ev.clientX);
+      const x = ev.clientX - grab - box.left + scroller.scrollLeft - LABEL_WIDTH;
+      player.seek(toTime(Math.max(0, x)));
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+
+  const onPlayheadKey = (e: React.KeyboardEvent) => {
+    if (!player) return;
+    const fps = project.canvas.fps;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      player.step((e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? fps : 1));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      player.seek(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      player.seek(Number.MAX_SAFE_INTEGER);
+    }
+  };
+
   const [rangeDraft, setRangeDraft] = useState<{ from: number; to: number } | null>(null);
 
   /** On the zoom row: dragging across empty space creates a zoom for that range; a click moves the playhead. */
@@ -238,9 +286,6 @@ export function Timeline({ project, player }: { project: Project; player: Player
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="timeline">
       <div className="flex shrink-0 items-center justify-end gap-1 px-3 py-1">
-        <span className="mr-auto pl-2 text-xs text-muted-foreground">
-          Drag to move, drag edges to trim. Ctrl or ⌘ + scroll to zoom.
-        </span>
         <TimelineButton label="Zoom timeline out" onClick={() => setPps(pps / 1.5)}>
           −
         </TimelineButton>
@@ -252,7 +297,7 @@ export function Timeline({ project, player }: { project: Project; player: Player
         </TimelineButton>
       </div>
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="no-scrollbar relative min-h-0 flex-1 overflow-auto">
         <div className="relative" style={{ width: contentWidth + LABEL_WIDTH }}>
           {/* Ruler */}
           <div className="sticky top-0 z-30 flex h-6 bg-background">
@@ -261,13 +306,32 @@ export function Timeline({ project, player }: { project: Project; player: Player
               className="relative flex-1 cursor-text border-b"
               onPointerDown={scrubFrom}
               data-testid="timeline-ruler"
-              aria-hidden
             >
-              {ticks.map((s) => (
-                <div key={s} className="absolute top-0 h-full border-l border-border" style={{ left: s * pps }}>
-                  <span className="ml-1 font-mono text-[10px] text-muted-foreground">{tickLabel(s, tickStep)}</span>
-                </div>
-              ))}
+              <div
+                role="slider"
+                tabIndex={0}
+                aria-label="Playhead"
+                aria-valuemin={0}
+                aria-valuemax={Math.round(duration / 10_000) / 100}
+                aria-valuenow={Math.round(time / 10_000) / 100}
+                data-testid="playhead-handle"
+                onPointerDown={dragPlayhead}
+                onKeyDown={onPlayheadKey}
+                className="absolute top-0 z-40 flex h-6 w-6 -translate-x-1/2 cursor-grab items-start justify-center outline-none active:cursor-grabbing"
+                style={{ left: toPx(time) }}
+              >
+                <span
+                  className="mt-0.5 block h-[18px] w-3.5 bg-red-500 shadow-sm ring-red-300 [[role=slider]:focus-visible_&]:ring-2"
+                  style={{ clipPath: "polygon(0 0, 100% 0, 100% 68%, 50% 100%, 0 68%)", borderRadius: 3 }}
+                />
+              </div>
+              <div aria-hidden className="contents">
+                {ticks.map((s) => (
+                  <div key={s} className="absolute top-0 h-full border-l border-border" style={{ left: s * pps }}>
+                    <span className="ml-1 font-mono text-[10px] text-muted-foreground">{tickLabel(s, tickStep)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -339,7 +403,6 @@ export function Timeline({ project, player }: { project: Project; player: Player
                 type="button"
                 aria-label="Add zoom at playhead"
                 aria-keyshortcuts="Z"
-                title="Add zoom at playhead (Z)"
                 onClick={() => addZoomAt(time)}
                 className="rounded p-0.5 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
@@ -349,7 +412,6 @@ export function Timeline({ project, player }: { project: Project; player: Player
           >
             <div
               className="absolute inset-0 cursor-cell"
-              title="Drag to add a zoom for that time range"
               data-testid="zoom-row-area"
               onPointerDown={rangeOrScrub}
             />
@@ -367,10 +429,9 @@ export function Timeline({ project, player }: { project: Project; player: Player
                   key={`chain-${zoom.id}`}
                   className="pointer-events-none absolute top-1/2 z-10 flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-violet-400 text-background"
                   style={{ left: toPx(prev.end + (zoom.start - prev.end) / 2) }}
-                  title="The camera pans between these zooms"
                   data-testid="zoom-chain"
                 >
-                  <Link2Icon className="size-2.5" aria-label="Pans to the next zoom" />
+                  <Link2Icon className="size-2.5" aria-label="Linked zooms" />
                 </span>
               );
             })}
@@ -488,7 +549,6 @@ export function Timeline({ project, player }: { project: Project; player: Player
                     type="button"
                     aria-label="Add text at playhead"
                     aria-keyshortcuts="T"
-                    title="Add text at playhead (T)"
                     onClick={() => addTextAt(time)}
                     className="rounded p-0.5 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   >
@@ -583,14 +643,19 @@ export function Timeline({ project, player }: { project: Project; player: Player
             ))}
           </Row>
 
-          {/* Playhead */}
+          {/* Playhead line. The visible 1 px line sits above the blocks; a wider strip to grab sits below them, so
+              clicking a block under the playhead still selects the block. The handle in the ruler always works. */}
           <div
-            className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-red-500"
+            className="pointer-events-none absolute top-6 bottom-0 z-20 w-px -translate-x-1/2 bg-red-500"
             style={{ left: LABEL_WIDTH + toPx(time) }}
             data-testid="timeline-playhead"
-          >
-            <div className="absolute -top-0 -left-1 size-2 rotate-45 bg-red-500" />
-          </div>
+          />
+          <div
+            className="absolute top-6 bottom-0 z-[5] w-3 -translate-x-1/2 cursor-ew-resize"
+            style={{ left: LABEL_WIDTH + toPx(time) }}
+            data-testid="playhead-grab"
+            onPointerDown={dragPlayhead}
+          />
         </div>
       </div>
     </div>
@@ -638,7 +703,7 @@ function Block(props: {
         if (e.key === "Enter") props.onSelect();
       }}
       className={cn(
-        "absolute top-1 bottom-1 flex cursor-grab items-center gap-1 overflow-hidden rounded-md px-2 text-[11px] font-medium ring-1 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing",
+        "absolute top-1 bottom-1 z-10 flex cursor-grab items-center gap-1 overflow-hidden rounded-md px-2 text-[11px] font-medium ring-1 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing",
         props.className,
         props.selected && "ring-2 ring-foreground",
       )}
