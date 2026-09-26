@@ -540,7 +540,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 - [x] Phase 3 (owner noted small bugs to revisit after Phase 10)
 - [x] Phase 4
 - [x] Phase 5
-- [ ] Phase 6 (in progress: one-gesture zooms and effects on `phase-6-auto-zoom`, local only; waiting on owner acceptance)
+- [x] Phase 6: one-gesture zooms and effects, camera fix and editor UI rework (PR #7, accepted by owner)
 - [ ] Phase 7
 - [ ] Phase 8
 - [ ] Phase 9
