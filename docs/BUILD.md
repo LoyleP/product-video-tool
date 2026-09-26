@@ -529,7 +529,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 - [x] Phase 2
 - [x] Phase 3 (owner noted small bugs to revisit after Phase 10)
 - [x] Phase 4
-- [ ] Phase 5 (in progress: code done on `phase-5-recording`; waiting on owner acceptance)
+- [x] Phase 5
 - [ ] Phase 6
 - [ ] Phase 7
 - [ ] Phase 8
