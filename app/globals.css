@@ -136,3 +136,9 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Selected text: a white highlight with black text, everywhere (page text and input fields). */
+::selection {
+  background: #ffffff;
+  color: #000000;
+}

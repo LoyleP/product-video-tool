@@ -298,3 +298,28 @@ test.describe("no instruction text", () => {
     await expect(page.getByRole("tab")).toHaveCount(2);
   });
 });
+
+test("selected text is white with black text, in page text and input fields", async ({ page }) => {
+  await importFixture(page);
+  const colors = async (selector: string) =>
+    page.locator(selector).first().evaluate((el) => {
+      const s = getComputedStyle(el, "::selection");
+      const toRgb = (css: string) => {
+        const ctx = document.createElement("canvas").getContext("2d")!;
+        ctx.fillStyle = css;
+        ctx.fillRect(0, 0, 1, 1);
+        return Array.from(ctx.getImageData(0, 0, 1, 1).data.slice(0, 3));
+      };
+      return { background: toRgb(s.backgroundColor), text: toRgb(s.color) };
+    });
+  // Page text and an input field share the rule.
+  for (const selector of ["h1", 'input[type="text"]']) {
+    expect(await colors(selector)).toEqual({ background: [255, 255, 255], text: [0, 0, 0] });
+  }
+
+  // A selection in a real input shows it: focusing a value selects it.
+  const padding = page.getByRole("textbox", { name: "Padding" });
+  await padding.focus();
+  const selected = await padding.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd, el.value.length]);
+  expect(selected).toEqual([0, 2, 2]);
+});
