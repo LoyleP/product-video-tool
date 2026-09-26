@@ -441,3 +441,12 @@ export function setTrackHidden(project: P, trackId: string, hidden: boolean): bo
   track.hidden = hidden;
   return true;
 }
+
+/** Inserts a complete zoom (for example an accepted suggestion). Rejected if it overlaps another zoom. */
+export function insertZoom(project: P, zoom: ZoomSegment): boolean {
+  if (zoom.end - zoom.start < MIN_ZOOM_DURATION) return false;
+  if (zoomsOverlap([...project.zooms, zoom])) return false;
+  project.zooms.push(zoom);
+  project.zooms.sort((a, b) => a.start - b.start);
+  return true;
+}

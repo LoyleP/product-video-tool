@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type SelectionKind = "clip" | "zoom" | "text" | "gesture";
+export type SelectionKind = "clip" | "zoom" | "text" | "gesture" | "suggestion";
 export type Selection = { kind: SelectionKind; id: string } | null;
 
 /** UI state that is not part of the project and not undoable. */

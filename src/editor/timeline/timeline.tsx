@@ -20,6 +20,8 @@ import {
   updateZoom,
 } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
+import { NO_SUGGESTIONS, useSuggestionsStore } from "@/store/suggestions-store";
+import { SuggestControls } from "../suggest/suggest-controls";
 import { useProjectStore } from "@/store/project-store";
 import type { Player } from "../preview/player";
 import { usePlayerState } from "../preview/use-player";
@@ -89,6 +91,7 @@ export function Timeline({ project, player }: { project: Project; player: Player
   const selection = useEditorStore((s) => s.selection);
   const select = useEditorStore((s) => s.select);
   const commit = useProjectStore((s) => s.commit);
+  const suggestions = useSuggestionsStore((s) => (s.projectId === project.id ? s.suggestions : NO_SUGGESTIONS));
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewWidth, setViewWidth] = useState(0);
 
@@ -193,9 +196,8 @@ export function Timeline({ project, player }: { project: Project; player: Player
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="timeline">
       <div className="flex shrink-0 items-center justify-end gap-1 px-3 py-1">
-        <span className="mr-auto pl-1 text-xs text-muted-foreground">
-          Drag to move, drag edges to trim. Ctrl or ⌘ + scroll to zoom.
-        </span>
+        <SuggestControls project={project} />
+        <span className="mr-auto pl-2 text-xs text-muted-foreground">Drag to move, drag edges to trim. Ctrl or ⌘ + scroll to zoom.</span>
         <TimelineButton label="Zoom timeline out" onClick={() => setPps(pps / 1.5)}>
           −
         </TimelineButton>
@@ -307,6 +309,37 @@ export function Timeline({ project, player }: { project: Project; player: Player
               onPointerDown={scrubFrom}
               onDoubleClick={(e) => addZoomAt(toTime(e.clientX - e.currentTarget.getBoundingClientRect().left))}
             />
+            {suggestions.map((s) => {
+              const selected = selection?.kind === "suggestion" && selection.id === s.id;
+              return (
+                <div
+                  key={s.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selected}
+                  aria-label={`Suggested zoom ${s.scale}×, ${formatTime(s.start)} to ${formatTime(s.end)}`}
+                  data-testid="timeline-suggestion"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    select({ kind: "suggestion", id: s.id });
+                  }}
+                  onKeyDown={(e) => {
+                    // Once selected, Enter falls through to the "accept suggestion" shortcut.
+                    if (!selected && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      select({ kind: "suggestion", id: s.id });
+                    }
+                  }}
+                  className={cn(
+                    "absolute top-1 bottom-1 flex cursor-pointer items-center overflow-hidden rounded-md border border-dashed border-violet-300/70 bg-violet-500/10 px-2 text-[11px] text-violet-200 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring",
+                    selected && "ring-2 ring-foreground",
+                  )}
+                  style={{ left: toPx(s.start), width: Math.max(4, toPx(s.end - s.start)) }}
+                >
+                  <span className="truncate">Suggested {s.scale}×</span>
+                </div>
+              );
+            })}
             {project.zooms.map((zoom) => {
               const selected = selection?.kind === "zoom" && selection.id === zoom.id;
               return (

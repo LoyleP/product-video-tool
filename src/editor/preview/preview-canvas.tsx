@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { canvasToMedia } from "@/engine/camera";
 import type { FrameProvider } from "@/engine/frame-provider";
 import { textAppearance } from "@/engine/layers/text";
@@ -12,6 +12,8 @@ import type { Project, TextLayer } from "@/schema/project";
 import { addGesture, findText, updateText, updateZoom } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
+import { useSuggestionsStore } from "@/store/suggestions-store";
+import { suggestionToZoom } from "../suggest/suggest-zooms";
 import { takeImportDuration } from "../import/import-timing";
 import type { Player } from "./player";
 import { usePlayerState } from "./use-player";
@@ -49,9 +51,20 @@ function useFontsVersion(project: Project): number {
 }
 
 /** Draws the project at the playhead with renderFrame, fitted to the available space. */
-export function PreviewCanvas({ project, frames, player }: Props) {
+export function PreviewCanvas({ project: editedProject, frames, player }: Props) {
   const { time, frameVersion } = usePlayerState(player);
   const selection = useEditorStore((s) => s.selection);
+  const suggestion = useSuggestionsStore((s) =>
+    selection?.kind === "suggestion" ? s.suggestions.find((x) => x.id === selection.id) : undefined,
+  );
+  // A selected suggestion previews as if accepted, so it can be judged before accepting.
+  const project = useMemo(
+    () =>
+      suggestion && !editedProject.zooms.some((z) => suggestion.start < z.end && suggestion.end > z.start)
+        ? { ...editedProject, zooms: [...editedProject.zooms, suggestionToZoom(suggestion)] }
+        : editedProject,
+    [editedProject, suggestion],
+  );
   const select = useEditorStore((s) => s.select);
   const gestureTool = useEditorStore((s) => s.gestureTool);
   const commit = useProjectStore((s) => s.commit);
@@ -109,10 +122,12 @@ export function PreviewCanvas({ project, frames, player }: Props) {
     const point = toCanvas(e, e.currentTarget);
     const layout = layoutAt(project, time);
 
-    if (selection?.kind === "zoom" && !gestureTool) {
+    if ((selection?.kind === "zoom" || selection?.kind === "suggestion") && !gestureTool) {
       if (!layout.primaryRect) return;
-      const focus = canvasToMedia(point, layout.primaryRect, layout.transform);
-      commit((d) => updateZoom(d, selection.id, { focus }));
+      const p = canvasToMedia(point, layout.primaryRect, layout.transform);
+      const focus = { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) };
+      if (selection.kind === "zoom") commit((d) => updateZoom(d, selection.id, { focus }));
+      else useSuggestionsStore.getState().update(selection.id, { focus });
       return;
     }
 
@@ -168,7 +183,11 @@ export function PreviewCanvas({ project, frames, player }: Props) {
           }
           role="img"
           style={{ width: cssWidth, height: cssHeight }}
-          className={gestureTool || selection?.kind === "zoom" ? "cursor-crosshair rounded-sm" : "rounded-sm"}
+          className={
+            gestureTool || selection?.kind === "zoom" || selection?.kind === "suggestion"
+              ? "cursor-crosshair rounded-sm"
+              : "rounded-sm"
+          }
           onPointerDown={onPointerDown}
         />
         {selectedText && !gestureTool && (

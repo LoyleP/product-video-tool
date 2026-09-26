@@ -6,6 +6,7 @@ import { addText, addZoom, deleteClip, deleteGesture, deleteText, deleteZoom, sp
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
 import type { Player } from "./preview/player";
+import { acceptSuggestions, dismissSuggestions } from "./suggest/accept";
 
 /** Controls that handle these keys themselves. Space also activates focused buttons. */
 function ownsKey(target: EventTarget | null, key: string): boolean {
@@ -98,9 +99,17 @@ export function useEditorShortcuts(player: Player | null) {
             setGestureTool(!gestureTool);
             return true;
           }
+          case "enter":
+            if (selection?.kind !== "suggestion") return false;
+            acceptSuggestions([selection.id]);
+            return true;
           case "delete":
           case "backspace": {
             if (!selection) return false;
+            if (selection.kind === "suggestion") {
+              dismissSuggestions([selection.id]);
+              return true;
+            }
             const remove = { clip: deleteClip, zoom: deleteZoom, text: deleteText, gesture: deleteGesture }[selection.kind];
             if (commit((d) => remove(d, selection.id))) select(null);
             return true;
