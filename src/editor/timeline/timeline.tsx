@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { PlusIcon, VolumeXIcon } from "lucide-react";
+import { Link2Icon, PlusIcon, VolumeXIcon } from "lucide-react";
+import { ZOOM_MERGE_GAP } from "@/engine/camera";
 import { MICROS_PER_SECOND, type Micros } from "@/engine/time";
 import { clipDuration, clipEnd, projectDuration } from "@/engine/timeline";
 import { formatTime } from "@/lib/format-time";
@@ -11,10 +12,13 @@ import { GESTURE_DURATION } from "@/engine/layers/gestures";
 import {
   addText,
   addZoom,
+  addZoomRange,
   moveClip,
+  moveEffect,
   moveText,
   moveZoom,
   trimClipEdge,
+  updateEffect,
   updateGesture,
   updateText,
   updateZoom,
@@ -143,6 +147,7 @@ export function Timeline({ project, player }: { project: Project; player: Player
       for (const l of track.layers) if (l.id !== excludeId) points.push(l.start, l.end);
     }
     for (const g of project.gestures) if (g.id !== excludeId) points.push(g.time);
+    for (const fx of project.effects) if (fx.id !== excludeId) points.push(fx.start, fx.end);
     return points;
   };
   const threshold = toTime(SNAP_PX);
@@ -174,6 +179,94 @@ export function Timeline({ project, player }: { project: Project; player: Player
     el.addEventListener("pointerup", up);
   };
 
+  /**
+   * Drags the playhead from its handle or line. The grab point is kept, so nothing jumps when the drag starts,
+   * and the timeline scrolls when the pointer nears its edge.
+   */
+  const dragPlayhead = (e: ReactPointerEvent<HTMLElement>) => {
+    const scroller = scrollRef.current;
+    if (!player || !scroller || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    player.pause();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const box = scroller.getBoundingClientRect();
+    const playheadX = box.left + LABEL_WIDTH + toPx(time) - scroller.scrollLeft;
+    const grab = e.clientX - playheadX;
+    const move = (ev: PointerEvent) => {
+      const edge = 48;
+      const left = box.left + LABEL_WIDTH;
+      if (ev.clientX > box.right - edge) scroller.scrollLeft += Math.min(40, ev.clientX - (box.right - edge));
+      else if (ev.clientX < left + edge) scroller.scrollLeft -= Math.min(40, left + edge - ev.clientX);
+      const x = ev.clientX - grab - box.left + scroller.scrollLeft - LABEL_WIDTH;
+      player.seek(toTime(Math.max(0, x)));
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+
+  const onPlayheadKey = (e: React.KeyboardEvent) => {
+    if (!player) return;
+    const fps = project.canvas.fps;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      player.step((e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? fps : 1));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      player.seek(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      player.seek(Number.MAX_SAFE_INTEGER);
+    }
+  };
+
+  const [rangeDraft, setRangeDraft] = useState<{ from: number; to: number } | null>(null);
+
+  /** On the zoom row: dragging across empty space creates a zoom for that range; a click moves the playhead. */
+  const rangeOrScrub = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!player || e.button !== 0) return;
+    const el = e.currentTarget;
+    const left = el.getBoundingClientRect().left;
+    const startX = Math.max(0, e.clientX - left);
+    el.setPointerCapture(e.pointerId);
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      const x = Math.max(0, ev.clientX - left);
+      if (!moved && Math.abs(x - startX) < DRAG_THRESHOLD_PX) return;
+      moved = true;
+      setRangeDraft({ from: Math.min(startX, x), to: Math.max(startX, x) });
+    };
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      setRangeDraft(null);
+      if (!moved) {
+        player.seek(toTime(startX));
+        return;
+      }
+      const points = snapPoints("");
+      const from = snap(toTime(startX), points, threshold).t;
+      const to = snap(toTime(Math.max(0, ev.clientX - left)), points, threshold).t;
+      const id = crypto.randomUUID();
+      if (commit((d) => addZoomRange(d, from, to, id, duration) !== null)) {
+        player.pause();
+        player.seek(Math.min(from, to) + Math.abs(to - from) / 2);
+        select({ kind: "zoom", id });
+      }
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+
+  const sortedZooms = [...project.zooms].sort((a, b) => a.start - b.start);
+
   const addZoomAt = (t: Micros) => {
     const id = crypto.randomUUID();
     let added = false;
@@ -193,9 +286,6 @@ export function Timeline({ project, player }: { project: Project; player: Player
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="timeline">
       <div className="flex shrink-0 items-center justify-end gap-1 px-3 py-1">
-        <span className="mr-auto pl-1 text-xs text-muted-foreground">
-          Drag to move, drag edges to trim. Ctrl or ⌘ + scroll to zoom.
-        </span>
         <TimelineButton label="Zoom timeline out" onClick={() => setPps(pps / 1.5)}>
           −
         </TimelineButton>
@@ -207,7 +297,7 @@ export function Timeline({ project, player }: { project: Project; player: Player
         </TimelineButton>
       </div>
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="no-scrollbar relative min-h-0 flex-1 overflow-auto">
         <div className="relative" style={{ width: contentWidth + LABEL_WIDTH }}>
           {/* Ruler */}
           <div className="sticky top-0 z-30 flex h-6 bg-background">
@@ -216,13 +306,32 @@ export function Timeline({ project, player }: { project: Project; player: Player
               className="relative flex-1 cursor-text border-b"
               onPointerDown={scrubFrom}
               data-testid="timeline-ruler"
-              aria-hidden
             >
-              {ticks.map((s) => (
-                <div key={s} className="absolute top-0 h-full border-l border-border" style={{ left: s * pps }}>
-                  <span className="ml-1 font-mono text-[10px] text-muted-foreground">{tickLabel(s, tickStep)}</span>
-                </div>
-              ))}
+              <div
+                role="slider"
+                tabIndex={0}
+                aria-label="Playhead"
+                aria-valuemin={0}
+                aria-valuemax={Math.round(duration / 10_000) / 100}
+                aria-valuenow={Math.round(time / 10_000) / 100}
+                data-testid="playhead-handle"
+                onPointerDown={dragPlayhead}
+                onKeyDown={onPlayheadKey}
+                className="absolute top-0 z-40 flex h-6 w-6 -translate-x-1/2 cursor-grab items-start justify-center outline-none active:cursor-grabbing"
+                style={{ left: toPx(time) }}
+              >
+                <span
+                  className="mt-0.5 block h-[18px] w-3.5 bg-red-500 shadow-sm ring-red-300 [[role=slider]:focus-visible_&]:ring-2"
+                  style={{ clipPath: "polygon(0 0, 100% 0, 100% 68%, 50% 100%, 0 68%)", borderRadius: 3 }}
+                />
+              </div>
+              <div aria-hidden className="contents">
+                {ticks.map((s) => (
+                  <div key={s} className="absolute top-0 h-full border-l border-border" style={{ left: s * pps }}>
+                    <span className="ml-1 font-mono text-[10px] text-muted-foreground">{tickLabel(s, tickStep)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -294,7 +403,6 @@ export function Timeline({ project, player }: { project: Project; player: Player
                 type="button"
                 aria-label="Add zoom at playhead"
                 aria-keyshortcuts="Z"
-                title="Add zoom at playhead (Z)"
                 onClick={() => addZoomAt(time)}
                 className="rounded p-0.5 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
@@ -303,10 +411,30 @@ export function Timeline({ project, player }: { project: Project; player: Player
             }
           >
             <div
-              className="absolute inset-0"
-              onPointerDown={scrubFrom}
-              onDoubleClick={(e) => addZoomAt(toTime(e.clientX - e.currentTarget.getBoundingClientRect().left))}
+              className="absolute inset-0 cursor-cell"
+              data-testid="zoom-row-area"
+              onPointerDown={rangeOrScrub}
             />
+            {rangeDraft && (
+              <div
+                className="pointer-events-none absolute top-1 bottom-1 rounded-md border border-dashed border-violet-300 bg-violet-500/20"
+                style={{ left: rangeDraft.from, width: rangeDraft.to - rangeDraft.from }}
+              />
+            )}
+            {sortedZooms.slice(1).map((zoom, i) => {
+              const prev = sortedZooms[i]!;
+              if (zoom.start - prev.end >= ZOOM_MERGE_GAP) return null;
+              return (
+                <span
+                  key={`chain-${zoom.id}`}
+                  className="pointer-events-none absolute top-1/2 z-10 flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-violet-400 text-background"
+                  style={{ left: toPx(prev.end + (zoom.start - prev.end) / 2) }}
+                  data-testid="zoom-chain"
+                >
+                  <Link2Icon className="size-2.5" aria-label="Linked zooms" />
+                </span>
+              );
+            })}
             {project.zooms.map((zoom) => {
               const selected = selection?.kind === "zoom" && selection.id === zoom.id;
               return (
@@ -357,6 +485,60 @@ export function Timeline({ project, player }: { project: Project; player: Player
             })}
           </Row>
 
+          <Row label="Effects">
+            <div className="absolute inset-0" onPointerDown={scrubFrom} />
+            {project.effects.map((effect) => (
+              <Block
+                key={effect.id}
+                left={toPx(effect.start)}
+                width={Math.max(4, toPx(effect.end - effect.start))}
+                selected={selection?.kind === "effect" && selection.id === effect.id}
+                className={
+                  effect.type === "spotlight"
+                    ? "bg-yellow-500/25 ring-yellow-400/60"
+                    : "bg-slate-400/25 ring-slate-300/60"
+                }
+                label={`${effect.type === "spotlight" ? "Spotlight" : "Blur"}, ${formatTime(effect.start)} to ${formatTime(effect.end)}`}
+                testId="timeline-effect"
+                onSelect={() => select({ kind: "effect", id: effect.id })}
+                onBody={(e) => {
+                  const key = `move-effect-${++dragSessions}`;
+                  const origin = effect.start;
+                  const length = effect.end - effect.start;
+                  const points = snapPoints(effect.id);
+                  beginDrag(e, {
+                    onClick: () => select({ kind: "effect", id: effect.id }),
+                    onMove: (dx) => {
+                      const raw = origin + toTime(dx);
+                      const a = snap(raw, points, threshold);
+                      const b = snap(raw + length, points, threshold);
+                      select({ kind: "effect", id: effect.id });
+                      commit((d) => moveEffect(d, effect.id, a.distance <= b.distance ? a.t : b.t - length), {
+                        coalesce: key,
+                      });
+                    },
+                  });
+                }}
+                onEdge={(edge, e) => {
+                  const key = `trim-effect-${++dragSessions}`;
+                  const origin = edge === "start" ? effect.start : effect.end;
+                  const points = snapPoints(effect.id);
+                  beginDrag(e, {
+                    onMove: (dx) => {
+                      const t = snap(origin + toTime(dx), points, threshold).t;
+                      select({ kind: "effect", id: effect.id });
+                      commit((d) => updateEffect(d, effect.id, edge === "start" ? { start: t } : { end: t }), {
+                        coalesce: key,
+                      });
+                    },
+                  });
+                }}
+              >
+                <span className="truncate">{effect.type === "spotlight" ? "Spotlight" : "Blur"}</span>
+              </Block>
+            ))}
+          </Row>
+
           {textTracks.map((track, index) => (
             <Row
               key={track.id}
@@ -367,7 +549,6 @@ export function Timeline({ project, player }: { project: Project; player: Player
                     type="button"
                     aria-label="Add text at playhead"
                     aria-keyshortcuts="T"
-                    title="Add text at playhead (T)"
                     onClick={() => addTextAt(time)}
                     className="rounded p-0.5 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   >
@@ -462,14 +643,19 @@ export function Timeline({ project, player }: { project: Project; player: Player
             ))}
           </Row>
 
-          {/* Playhead */}
+          {/* Playhead line. The visible 1 px line sits above the blocks; a wider strip to grab sits below them, so
+              clicking a block under the playhead still selects the block. The handle in the ruler always works. */}
           <div
-            className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-red-500"
+            className="pointer-events-none absolute top-6 bottom-0 z-20 w-px -translate-x-1/2 bg-red-500"
             style={{ left: LABEL_WIDTH + toPx(time) }}
             data-testid="timeline-playhead"
-          >
-            <div className="absolute -top-0 -left-1 size-2 rotate-45 bg-red-500" />
-          </div>
+          />
+          <div
+            className="absolute top-6 bottom-0 z-[5] w-3 -translate-x-1/2 cursor-ew-resize"
+            style={{ left: LABEL_WIDTH + toPx(time) }}
+            data-testid="playhead-grab"
+            onPointerDown={dragPlayhead}
+          />
         </div>
       </div>
     </div>
@@ -517,7 +703,7 @@ function Block(props: {
         if (e.key === "Enter") props.onSelect();
       }}
       className={cn(
-        "absolute top-1 bottom-1 flex cursor-grab items-center gap-1 overflow-hidden rounded-md px-2 text-[11px] font-medium ring-1 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing",
+        "absolute top-1 bottom-1 z-10 flex cursor-grab items-center gap-1 overflow-hidden rounded-md px-2 text-[11px] font-medium ring-1 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing",
         props.className,
         props.selected && "ring-2 ring-foreground",
       )}

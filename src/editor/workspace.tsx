@@ -12,16 +12,17 @@ import { loadProject } from "@/storage/projects";
 import { appendVideo } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
-import { BackgroundsRail } from "./backgrounds-rail";
 import { ACCEPT_ATTRIBUTE, ImportError, importAsset } from "./import/import-video";
+import { LeftPanel } from "./left-panel";
 import { ClipPanel } from "./inspector/clip-panel";
+import { EffectPanel } from "./inspector/effect-panel";
 import { GesturePanel } from "./inspector/gesture-panel";
 import { TextPanel } from "./inspector/text-panel";
 import { ExportPanel } from "./inspector/export-panel";
 import { StylePanel } from "./inspector/style-panel";
 import { ZoomPanel } from "./inspector/zoom-panel";
-import { PresetsRail } from "./presets-rail";
 import { PreviewCanvas } from "./preview/preview-canvas";
+import { ToolBar } from "./preview/tool-bar";
 import { usePlayer } from "./preview/use-player";
 import { Timeline } from "./timeline/timeline";
 import { Transport } from "./timeline/transport";
@@ -63,12 +64,18 @@ export function EditorWorkspace({ projectId }: { projectId: string }) {
 }
 
 type InspectorTab = "style" | "edit" | "export";
-const EDIT_LABELS = { clip: "Clip", zoom: "Zoom", text: "Text", gesture: "Tap" } as const;
+const EDIT_LABELS = {
+  clip: "Clip",
+  zoom: "Zoom",
+  text: "Text",
+  gesture: "Tap",
+  effect: "Effect",
+} as const;
 
 function Workspace({ project }: { project: Project }) {
   const { player, frames, error } = usePlayer(project);
   const autosave = useAutosave(project);
-  const [tab, setTab] = useState<InspectorTab>("style");
+  const [chosenTab, setTab] = useState<InspectorTab>("style");
   const selection = useEditorStore((s) => s.selection);
   const gestureTool = useEditorStore((s) => s.gestureTool);
   const canUndo = useProjectStore((s) => s.past.length > 0);
@@ -96,6 +103,10 @@ function Workspace({ project }: { project: Project }) {
 
   // A new project starts with nothing selected.
   useEffect(() => useEditorStore.getState().select(null), [project.id]);
+
+  // The contextual tab exists only while there is something selected (or the tap tool is on).
+  const tabs: InspectorTab[] = selection || gestureTool ? ["style", "edit", "export"] : ["style", "export"];
+  const tab: InspectorTab = tabs.includes(chosenTab) ? chosenTab : "style";
 
   const run = (action: "undo" | "redo") => {
     useProjectStore.getState()[action]();
@@ -130,12 +141,10 @@ function Workspace({ project }: { project: Project }) {
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="w-64 shrink-0 space-y-8 overflow-y-auto border-r p-4">
-          <PresetsRail />
-          <BackgroundsRail />
-        </aside>
+        <LeftPanel />
         <main className="flex min-w-0 flex-1 flex-col">
-          <section aria-label="Preview" className="relative flex min-h-0 flex-1 p-6">
+          <section aria-label="Preview" className="relative flex min-h-0 flex-1 flex-col items-center gap-3 p-6 pt-3">
+            <ToolBar project={project} player={player} />
             <PreviewCanvas project={project} frames={frames} player={player} />
             {error && (
               <p
@@ -155,7 +164,7 @@ function Workspace({ project }: { project: Project }) {
         </main>
         <aside aria-label="Inspector" className="flex w-80 shrink-0 flex-col border-l">
           <div role="tablist" aria-label="Inspector panels" className="flex shrink-0 gap-1 border-b px-3 pt-3">
-            {(["style", "edit", "export"] as const).map((id) => (
+            {tabs.map((id) => (
               <button
                 key={id}
                 id={`tab-${id}`}
@@ -169,7 +178,7 @@ function Workspace({ project }: { project: Project }) {
                   tab === id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
                 )}
               >
-                {id === "edit" ? (selection ? EDIT_LABELS[selection.kind] : gestureTool ? "Tap" : "Edit") : id}
+                {id === "edit" ? (selection ? EDIT_LABELS[selection.kind] : "Tap") : id}
               </button>
             ))}
           </div>
@@ -178,38 +187,16 @@ function Workspace({ project }: { project: Project }) {
             {tab === "edit" && (
               <>
                 {selection?.kind === "clip" && <ClipPanel project={project} player={player} />}
-                {selection?.kind === "zoom" && <ZoomPanel project={project} />}
+                {selection?.kind === "zoom" && <ZoomPanel project={project} player={player} />}
+                {selection?.kind === "effect" && <EffectPanel project={project} />}
                 {selection?.kind === "text" && <TextPanel project={project} />}
                 {(selection?.kind === "gesture" || (!selection && gestureTool)) && <GesturePanel project={project} />}
-                {!selection && !gestureTool && <EditHelp />}
               </>
             )}
             {tab === "export" && <ExportPanel project={project} />}
           </div>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function EditHelp() {
-  return (
-    <div className="space-y-3 text-sm text-muted-foreground">
-      <p>Select something in the timeline to edit it, or add:</p>
-      <ul className="space-y-1.5">
-        <li>
-          <kbd className="rounded border px-1 font-mono text-xs">Z</kbd> a zoom at the playhead
-        </li>
-        <li>
-          <kbd className="rounded border px-1 font-mono text-xs">T</kbd> text at the playhead
-        </li>
-        <li>
-          <kbd className="rounded border px-1 font-mono text-xs">G</kbd> the tap tool, then click or drag the preview
-        </li>
-        <li>
-          <kbd className="rounded border px-1 font-mono text-xs">S</kbd> split the clip at the playhead
-        </li>
-      </ul>
     </div>
   );
 }

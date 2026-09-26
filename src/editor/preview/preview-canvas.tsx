@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { canvasToMedia } from "@/engine/camera";
 import type { FrameProvider } from "@/engine/frame-provider";
 import { textAppearance } from "@/engine/layers/text";
@@ -9,9 +9,10 @@ import { loadFontsHere, projectFontFamilies } from "@/engine/text/fonts";
 import type { Micros } from "@/engine/time";
 import { clipAt, sourceTimeAt } from "@/engine/timeline";
 import type { Project, TextLayer } from "@/schema/project";
-import { addGesture, findText, updateText, updateZoom } from "@/store/edits";
+import { addGesture, findText, updateText } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
+import { SelectedBox } from "./selected-box";
 import { takeImportDuration } from "../import/import-timing";
 import type { Player } from "./player";
 import { usePlayerState } from "./use-player";
@@ -49,11 +50,18 @@ function useFontsVersion(project: Project): number {
 }
 
 /** Draws the project at the playhead with renderFrame, fitted to the available space. */
-export function PreviewCanvas({ project, frames, player }: Props) {
-  const { time, frameVersion } = usePlayerState(player);
+export function PreviewCanvas({ project: editedProject, frames, player }: Props) {
+  const { time, frameVersion, playing } = usePlayerState(player);
   const selection = useEditorStore((s) => s.selection);
-  const select = useEditorStore((s) => s.select);
   const gestureTool = useEditorStore((s) => s.gestureTool);
+  // While paused with a zoom or effect selected, show the frame at rest with its box on top.
+  const editingBox =
+    !playing && !gestureTool && (selection?.kind === "zoom" || selection?.kind === "effect");
+  const project = useMemo(
+    () => (editingBox ? { ...editedProject, zooms: [] } : editedProject),
+    [editedProject, editingBox],
+  );
+  const select = useEditorStore((s) => s.select);
   const commit = useProjectStore((s) => s.commit);
   const fontsVersion = useFontsVersion(project);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,13 +117,6 @@ export function PreviewCanvas({ project, frames, player }: Props) {
     const point = toCanvas(e, e.currentTarget);
     const layout = layoutAt(project, time);
 
-    if (selection?.kind === "zoom" && !gestureTool) {
-      if (!layout.primaryRect) return;
-      const focus = canvasToMedia(point, layout.primaryRect, layout.transform);
-      commit((d) => updateZoom(d, selection.id, { focus }));
-      return;
-    }
-
     if (gestureTool) {
       if (!layout.primaryRect) return;
       const rect = layout.primaryRect;
@@ -154,23 +155,20 @@ export function PreviewCanvas({ project, frames, player }: Props) {
   const selectedText = selection?.kind === "text" ? findText(project, selection.id)?.layer : undefined;
 
   return (
-    <div ref={containerRef} className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
+    <div ref={containerRef} className="flex min-h-0 w-full min-w-0 flex-1 items-center justify-center">
       <div className="relative" style={{ width: cssWidth, height: cssHeight }}>
         <canvas
           ref={canvasRef}
           data-testid="preview-canvas"
-          aria-label={
-            gestureTool
-              ? "Video preview. Click to add a tap, drag to add a swipe."
-              : selection?.kind === "zoom"
-                ? "Video preview. Click to aim the selected zoom."
-                : "Video preview"
-          }
+          aria-label="Video preview"
           role="img"
           style={{ width: cssWidth, height: cssHeight }}
-          className={gestureTool || selection?.kind === "zoom" ? "cursor-crosshair rounded-sm" : "rounded-sm"}
+          className={gestureTool ? "cursor-crosshair rounded-sm" : "rounded-sm"}
           onPointerDown={onPointerDown}
         />
+        {editingBox && cssWidth > 0 && (
+          <SelectedBox project={project} time={time} cssWidth={cssWidth} player={player} />
+        )}
         {selectedText && !gestureTool && (
           <TextBoxOverlay layer={selectedText} cssWidth={cssWidth} cssHeight={cssHeight} visible={textAppearance(selectedText, time) !== null} />
         )}

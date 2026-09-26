@@ -116,6 +116,7 @@ export function createProjectFromVideo({ id, now, asset, sourceFps, newId }: Cre
     textTracks: [],
     zooms: [],
     gestures: [],
+    effects: [],
     captions: null,
     style: structuredClone(DEFAULT_STYLE),
     export: { ...DEFAULT_EXPORT, fps },

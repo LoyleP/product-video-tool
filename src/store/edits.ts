@@ -1,11 +1,13 @@
 import type { Draft } from "immer";
-import { EASING_PRESETS } from "@/engine/easing";
+import { ZOOM_MERGE_GAP } from "@/engine/camera";
+import { MOTION_PRESETS } from "@/engine/easing";
 import type { Micros } from "@/engine/time";
 import { clipDuration, clipEnd, sourceTimeAt } from "@/engine/timeline";
 import { DEFAULT_FONT_FAMILY } from "@/engine/text/fonts";
 import type { StylePreset } from "@/schema/presets";
 import type {
   Clip,
+  Effect,
   Gesture,
   MediaAsset,
   Overlay,
@@ -198,31 +200,71 @@ export function zoomsOverlap(zooms: readonly Pick<ZoomSegment, "id" | "start" | 
  * zoom and the project end; rejected if less than the minimum length fits.
  */
 export function addZoom(project: P, t: Micros, id: string, projectEnd: Micros): ZoomSegment | null {
-  const start = Math.max(0, Math.round(t));
+  let start = Math.max(0, Math.round(t));
   if (project.zooms.some((z) => start >= z.start && start < z.end)) return null;
+  // Right after another zoom: start where it ends, so the camera pans instead of zooming out and back in.
+  const justEnded = project.zooms.find((z) => z.end <= start && start - z.end < ZOOM_MERGE_GAP);
+  if (justEnded) start = justEnded.end;
   const nextStart = project.zooms.filter((z) => z.start > start).reduce((m, z) => Math.min(m, z.start), projectEnd);
   const end = Math.min(start + DEFAULT_ZOOM_DURATION, nextStart);
   if (end - start < MIN_ZOOM_DURATION) return null;
-  const zoom: ZoomSegment = {
+  const zoom = newZoom(id, start, end);
+  project.zooms.push(zoom);
+  project.zooms.sort((a, b) => a.start - b.start);
+  return zoom;
+}
+
+/** A 2x centered zoom with the default "gentle" motion. */
+export function newZoom(id: string, start: Micros, end: Micros): ZoomSegment {
+  return {
     id,
     start,
     end,
     scale: 2,
     focus: { x: 0.5, y: 0.5 },
-    easeIn: EASING_PRESETS.spring,
-    easeOut: EASING_PRESETS.spring,
+    easeIn: MOTION_PRESETS.gentle.easing,
+    easeOut: MOTION_PRESETS.gentle.easing,
     origin: "manual",
+    transition: MOTION_PRESETS.gentle.transition,
   };
+}
+
+/**
+ * Adds a zoom covering a dragged time range, trimmed to the free space around it. Rejected when less than
+ * the minimum length is free.
+ */
+export function addZoomRange(project: P, from: Micros, to: Micros, id: string, projectEnd: Micros): ZoomSegment | null {
+  let start = Math.max(0, Math.round(Math.min(from, to)));
+  let end = Math.min(projectEnd, Math.round(Math.max(from, to)));
+  if (project.zooms.some((z) => start >= z.start && start < z.end)) return null;
+  const nextStart = project.zooms.filter((z) => z.start >= start).reduce((m, z) => Math.min(m, z.start), end);
+  end = Math.min(end, nextStart);
+  const prevEnd = project.zooms.filter((z) => z.end <= start).reduce((m, z) => Math.max(m, z.end), 0);
+  if (start - prevEnd < ZOOM_MERGE_GAP && prevEnd > 0) start = prevEnd;
+  if (end - start < MIN_ZOOM_DURATION) return null;
+  const zoom = newZoom(id, start, end);
   project.zooms.push(zoom);
   project.zooms.sort((a, b) => a.start - b.start);
   return zoom;
+}
+
+/** Splits a zoom at `t` into two back-to-back zooms, which the camera pans between. */
+export function splitZoom(project: P, id: string, t: Micros, newId: string): boolean {
+  const zoom = project.zooms.find((z) => z.id === id);
+  if (!zoom) return false;
+  const cut = Math.round(t);
+  if (cut - zoom.start < MIN_ZOOM_DURATION || zoom.end - cut < MIN_ZOOM_DURATION) return false;
+  project.zooms.push({ ...zoom, id: newId, start: cut, focus: { ...zoom.focus } });
+  zoom.end = cut;
+  project.zooms.sort((a, b) => a.start - b.start);
+  return true;
 }
 
 /** Updates a zoom. Rejected when the result would overlap another zoom or be too short. */
 export function updateZoom(
   project: P,
   id: string,
-  patch: Partial<Pick<ZoomSegment, "start" | "end" | "scale" | "focus" | "easeIn" | "easeOut">>,
+  patch: Partial<Pick<ZoomSegment, "start" | "end" | "scale" | "focus" | "easeIn" | "easeOut" | "transition">>,
 ): boolean {
   const zoom = project.zooms.find((z) => z.id === id);
   if (!zoom) return false;
@@ -439,5 +481,65 @@ export function setTrackHidden(project: P, trackId: string, hidden: boolean): bo
   const track = project.videoTracks.find((t) => t.id === trackId);
   if (!track || track.hidden === hidden) return false;
   track.hidden = hidden;
+  return true;
+}
+
+// Effects (spotlight, blur)
+
+export const DEFAULT_EFFECT_DURATION: Micros = 3_000_000;
+export const MIN_EFFECT_DURATION: Micros = 200_000;
+/** Smallest effect box, as a fraction of the recording. */
+const MIN_EFFECT_SIZE = 0.03;
+
+function clampRect(rect: Effect["rect"]): Effect["rect"] {
+  const w = Math.min(1, Math.max(MIN_EFFECT_SIZE, rect.w));
+  const h = Math.min(1, Math.max(MIN_EFFECT_SIZE, rect.h));
+  return { x: Math.min(1 - w, Math.max(0, rect.x)), y: Math.min(1 - h, Math.max(0, rect.y)), w, h };
+}
+
+/** Adds a 3 s effect at `t` with a centered box. Effects may overlap each other. */
+export function addEffect(
+  project: P,
+  type: Effect["type"],
+  t: Micros,
+  id: string,
+  projectEnd: Micros,
+  rect: Effect["rect"] = { x: 0.3, y: 0.3, w: 0.4, h: 0.4 },
+): Effect | null {
+  const start = Math.max(0, Math.round(t));
+  const end = Math.min(start + DEFAULT_EFFECT_DURATION, projectEnd);
+  if (end - start < MIN_EFFECT_DURATION) return null;
+  const effect: Effect = { id, type, start, end, rect: clampRect(rect), intensity: 0.6 };
+  project.effects.push(effect);
+  project.effects.sort((a, b) => a.start - b.start);
+  return effect;
+}
+
+export function updateEffect(project: P, id: string, patch: Partial<Omit<Effect, "id">>): boolean {
+  const effect = project.effects.find((e) => e.id === id);
+  if (!effect) return false;
+  const next: Effect = { ...effect, ...patch };
+  next.rect = clampRect(next.rect);
+  next.start = Math.max(0, Math.round(next.start));
+  next.end = Math.round(next.end);
+  next.intensity = Math.min(1, Math.max(0, next.intensity));
+  if (next.end - next.start < MIN_EFFECT_DURATION) return false;
+  if (JSON.stringify(next) === JSON.stringify(effect)) return false;
+  Object.assign(effect, next);
+  project.effects.sort((a, b) => a.start - b.start);
+  return true;
+}
+
+export function moveEffect(project: P, id: string, start: Micros): boolean {
+  const effect = project.effects.find((e) => e.id === id);
+  if (!effect) return false;
+  const s = Math.max(0, Math.round(start));
+  return updateEffect(project, id, { start: s, end: s + (effect.end - effect.start) });
+}
+
+export function deleteEffect(project: P, id: string): boolean {
+  const index = project.effects.findIndex((e) => e.id === id);
+  if (index === -1) return false;
+  project.effects.splice(index, 1);
   return true;
 }

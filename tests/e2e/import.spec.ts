@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { openLeftPanel } from "./helpers";
 
 const fixture = (name: string) => path.join(__dirname, "..", "fixtures", name);
 
@@ -51,6 +52,7 @@ test("style changes update the preview and survive a reload", async ({ page }) =
   await importFixture(page, "landscape-h264-aac.mp4");
   const before = await pixel(page, 0.01, 0.01);
 
+  await openLeftPanel(page, "Backgrounds");
   await page.getByRole("button", { name: "Paper", exact: true }).click();
   await expect(page.getByRole("button", { name: "Paper", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => pixel(page, 0.01, 0.01)).toEqual([250, 250, 250, 255]);
@@ -59,12 +61,13 @@ test("style changes update the preview and survive a reload", async ({ page }) =
   const padding = page.getByRole("slider", { name: "Padding" });
   await padding.focus();
   await page.keyboard.press("Home");
-  await expect(page.getByText("0%", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Padding" })).toHaveValue("0");
 
   // Autosave is debounced by one second.
   await page.waitForTimeout(1500);
   await page.reload();
   await expect(page.getByTestId("preview-canvas")).toHaveAttribute("data-first-frame", "ready", { timeout: 10_000 });
+  await openLeftPanel(page, "Backgrounds");
   await expect(page.getByRole("button", { name: "Paper", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("slider", { name: "Padding" })).toHaveAttribute("aria-valuenow", "0");
 });

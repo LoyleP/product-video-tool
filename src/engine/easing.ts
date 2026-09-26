@@ -103,3 +103,25 @@ export function easingPresetOf(easing: Easing): EasingPreset | null {
   }
   return null;
 }
+
+/**
+ * Zoom motion in plain words: easing plus transition length. "Gentle" is the default critically damped
+ * spring at 600 ms (BUILD.md 7.3).
+ */
+export const MOTION_PRESETS = {
+  gentle: { easing: EASING_PRESETS.spring, transition: 600_000 },
+  quick: { easing: EASING_PRESETS.snappy, transition: 350_000 },
+  slow: { easing: EASING_PRESETS.smooth, transition: 1_000_000 },
+} as const;
+
+export type MotionPreset = keyof typeof MOTION_PRESETS;
+
+/** The motion preset a zoom uses, or null for a custom combination. */
+export function motionPresetOf(zoom: { easeIn: Easing; transition?: number }): MotionPreset | null {
+  const easing = JSON.stringify(zoom.easeIn);
+  const transition = zoom.transition ?? 600_000;
+  for (const [name, preset] of Object.entries(MOTION_PRESETS)) {
+    if (JSON.stringify(preset.easing) === easing && preset.transition === transition) return name as MotionPreset;
+  }
+  return null;
+}

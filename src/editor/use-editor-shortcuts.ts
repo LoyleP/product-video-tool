@@ -2,7 +2,17 @@
 
 import { useEffect } from "react";
 import { projectDuration } from "@/engine/timeline";
-import { addText, addZoom, deleteClip, deleteGesture, deleteText, deleteZoom, splitClip } from "@/store/edits";
+import {
+  addText,
+  addZoom,
+  deleteClip,
+  deleteEffect,
+  deleteGesture,
+  deleteText,
+  deleteZoom,
+  splitClip,
+  splitZoom,
+} from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
 import type { Player } from "./preview/player";
@@ -75,6 +85,11 @@ export function useEditorShortcuts(player: Player | null) {
             return true;
           case "s": {
             const t = player.getState().time;
+            // With a zoom selected, S splits the zoom so the camera can pan to a second target.
+            if (selection?.kind === "zoom") {
+              commit((d) => splitZoom(d, selection.id, t, crypto.randomUUID()));
+              return true;
+            }
             const clipId = selection?.kind === "clip" ? selection.id : undefined;
             if (!commit((d) => splitClip(d, t, crypto.randomUUID(), clipId)) && clipId) {
               commit((d) => splitClip(d, t, crypto.randomUUID()));
@@ -101,7 +116,13 @@ export function useEditorShortcuts(player: Player | null) {
           case "delete":
           case "backspace": {
             if (!selection) return false;
-            const remove = { clip: deleteClip, zoom: deleteZoom, text: deleteText, gesture: deleteGesture }[selection.kind];
+            const remove = {
+              clip: deleteClip,
+              zoom: deleteZoom,
+              text: deleteText,
+              gesture: deleteGesture,
+              effect: deleteEffect,
+            }[selection.kind];
             if (commit((d) => remove(d, selection.id))) select(null);
             return true;
           }

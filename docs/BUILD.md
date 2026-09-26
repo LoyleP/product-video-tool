@@ -135,7 +135,6 @@ Note on Remotion packages: `@remotion/whisper-webgpu` wraps the same Transformer
 │  │  ├─ decode/                # Mediabunny input, frame cache (LRU)
 │  │  ├─ export/                # export worker, encoder config, progress
 │  │  ├─ record/                # getDisplayMedia and webcam capture
-│  │  ├─ analysis/              # motion analysis for auto zoom
 │  │  └─ captions/              # whisper worker
 │  ├─ editor/                   # React UI
 │  │  ├─ preview/               # canvas, playback loop, transport controls
@@ -335,11 +334,13 @@ Motion blur (Phase 9): export only. Render K subframes per output frame across a
 - Cursor control via the `cursor` constraint is not honored consistently across browsers; Chromium does not yet expose the full constraint surface. Always read back `track.getSettings().cursor` and store it.
 - Hard platform limit: a web page cannot read the cursor position outside its own tab. This means Screen Studio or Matte style cursor smoothing, cursor restyling and click-driven auto zoom are impossible for general screen recordings made in the browser or for uploaded files. The cursor is baked into the pixels. Design around this; do not try to fake it.
 
-### 7.6 Auto zoom (Phase 6)
+### 7.6 Auto zoom (Mode A removed; Mode B in Phase 10)
 
 Because cursor telemetry is usually unavailable, auto zoom works in two modes:
 
-Mode A, motion analysis (works on any video):
+Owner decision (2026-09-26): Mode A was built and then removed. Making manual zooms a one-gesture action (7.6.1) proved simpler than reviewing motion-based suggestions. Mode B remains planned for Phase 10. Mode A is kept here for reference only.
+
+Mode A, motion analysis (works on any video, not implemented):
 1. In a worker, decode the video at about 10 fps, downscale to 160 px wide, convert to grayscale.
 2. Diff consecutive frames, threshold, and compute per step the bounding box and magnitude of changed pixels.
 3. Classify steps: full-frame change (scroll, page transition, above 60 percent of area) is ignored; localized change (below 35 percent of area) is activity.
@@ -348,6 +349,12 @@ Mode A, motion analysis (works on any video):
 6. Show proposals on the timeline as ghost segments that the user accepts, edits or dismisses individually or all at once.
 
 Mode B, interaction events (precise, websites only, Phase 10): a companion Chrome extension records the page and logs clicks, focus changes and scrolls with timestamps into `interactionEvents`. Auto zoom then targets real click positions and can render a synthetic, restyled cursor.
+
+### 7.6.1 One-gesture zooms and effects (added during Phase 6)
+
+Manual zooms are the primary path. While a zoom or effect is selected and playback is paused, the preview shows the frame at rest with the item's box: drag outside it to draw a new box (zooms keep the canvas aspect ratio, so the box is exactly what the zoom shows), drag inside to move, drag a corner to resize, click to recenter. A floating toolbar offers motion in words (Gentle 600 ms spring, Quick 350 ms, Slow 1 s), split and delete. Dragging across the zoom row creates a zoom for that range. A new zoom within 300 ms of the previous one snaps onto it, and chained zooms show a link marker. `ZoomSegment.transition` (optional) stores the transition length.
+
+Effects: `Project.effects` (defaults to empty for older projects) holds spotlight (dim outside a box) and blur (blur inside a box) items in media space, drawn over the recording and under the device frame, following zooms.
 
 ### 7.7 Gestures
 
@@ -372,11 +379,14 @@ Manual placement in Phase 4: user clicks on the preview at the playhead to add a
 
 Three-zone layout on desktop, minimum width 1280 px:
 
-- Left rail: presets and backgrounds gallery.
+- Left rail: a narrow icon bar with one button per menu (Presets, Backgrounds), and the chosen menu opening as a panel next to it, as in a code editor. Selecting the open menu again closes the panel.
 - Center: preview canvas with transport controls, and the timeline below it (tracks: video, zooms, gestures, text, captions, audio).
 - Right: inspector with contextual panels (Style, Zoom, Text, Gesture, Export).
 
 Interaction requirements:
+- No instruction text anywhere in the UI (no hints, help paragraphs or "how to" lines). Labels, values, and the error and status messages required by section 11 remain. The contextual inspector tab exists only while something is selected.
+- Every numeric value has a slider (where a range makes sense) and a typed input beside it, using px for lengths, seconds for time, degrees for angles and % for opacity and dimming. Enter or leaving the field applies it, values clamp to the allowed range, Escape restores, Up and Down step (10x with Shift). Padding, zoom focus, effect and tap positions are stored as fractions and converted for display. Colors take hex values.
+- The playhead has a grabbable handle in the ruler (also a keyboard slider) and a wider draggable line. The timeline scrolls without a scrollbar.
 - Keyboard: Space play and pause, J K L shuttle, S split at playhead, Z add zoom at playhead, T add text, Delete removes selection, Cmd or Ctrl plus Z and Shift plus Z for undo and redo.
 - Timeline: zoomable, snapping to playhead, clip edges and segment edges; drag to move, drag edges to trim.
 - Every mutation goes through a command in the store so undo and redo are always correct.
@@ -466,9 +476,9 @@ Accept: text renders identically in preview and export; frames align pixel-exact
 Screen, window or tab capture with optional webcam overlay (circle or rounded rect) and microphone, recorded straight into a new project.
 Accept: a 5 minute 1080p recording completes without dropped audio and opens in the editor without re-import.
 
-### Phase 6: Auto zoom by motion analysis
-Implement 7.6 Mode A with ghost proposals on the timeline.
-Accept: on a set of 5 reference recordings, at least 70 percent of proposals are accepted as useful by the owner.
+### Phase 6: One-gesture zooms and effects
+Replaces the original "auto zoom by motion analysis" (7.6 Mode A), by owner decision. Implement 7.6.1: draw-to-zoom boxes on the preview, range drag on the zoom row, motion in words, split and chained zooms, spotlight and blur effects.
+Accept: the owner can add and aim a zoom, spotlight or blur in one gesture.
 
 ### Phase 7: Accounts, cloud, watermark, billing
 Auth, cloud project save (JSON in Postgres, media in Vercel Blob via client uploads), share links with a hosted player page, free plan watermark, paid plan checkout.
@@ -495,7 +505,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 
 ## 12. Testing strategy
 
-- Unit (Vitest): `time.ts`, `easing.ts`, `camera.ts`, clip time mapping, timeline commands, schema migrations, motion analysis on synthetic frame arrays.
+- Unit (Vitest): `time.ts`, `easing.ts`, `camera.ts`, clip time mapping, timeline commands, schema migrations, zoom box math, effects.
 - Golden frame tests: render fixed projects at fixed times into an OffscreenCanvas (in Playwright, real Chromium) and compare against stored PNGs with a small tolerance.
 - E2E (Playwright): import fixture, apply preset, add zoom, export, verify file duration and dimensions by reading it back with Mediabunny.
 - Fixtures in `tests/fixtures`: short H.264 MP4, VFR MOV, WebM, a clip with audio, a portrait phone recording.
@@ -530,7 +540,7 @@ Records a tab plus interaction events; enables precise auto zoom and a synthetic
 - [x] Phase 3 (owner noted small bugs to revisit after Phase 10)
 - [x] Phase 4
 - [x] Phase 5
-- [ ] Phase 6
+- [x] Phase 6: one-gesture zooms and effects, camera fix and editor UI rework (PR #7, accepted by owner)
 - [ ] Phase 7
 - [ ] Phase 8
 - [ ] Phase 9

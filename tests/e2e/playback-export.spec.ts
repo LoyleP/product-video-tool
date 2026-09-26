@@ -133,7 +133,8 @@ test("trim changes the exported duration", async ({ page }) => {
   await trimStart.focus();
   // Radix moves 10 steps (100 ms) per PageUp.
   for (let i = 0; i < 10; i++) await page.keyboard.press("PageUp");
-  await expect(trimStart).toHaveAttribute("aria-valuenow", "1000");
+  // The trim sliders are in seconds now: ten 0.1 s steps.
+  await expect(trimStart).toHaveAttribute("aria-valuenow", "1");
   await expect(page.getByTestId("time-display")).toContainText("/ 0:02.00");
 
   const out = await exportAndRead(page);

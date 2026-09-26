@@ -56,6 +56,8 @@ export function drawMedia(
   placement: MediaPlacement,
   style: CompositionStyle,
   pixelScale: number,
+  /** Drawn over the media and under the device frame (spotlight and blur effects). */
+  overMedia?: () => void,
 ): void {
   const { screen, radii, device } = placement;
   if (screen.w <= 0 || screen.h <= 0) return;
@@ -93,5 +95,6 @@ export function drawMedia(
   }
   ctx.restore();
 
+  overMedia?.();
   if (device) withDevice(ctx, device, () => device.def.draw(ctx, device.geometry, device.color));
 }

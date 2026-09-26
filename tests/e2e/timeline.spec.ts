@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { openLeftPanel } from "./helpers";
 
 const fixture = (name: string) => path.join(__dirname, "..", "fixtures", name);
 
@@ -60,6 +61,7 @@ test("clip speed changes the duration and can be undone", async ({ page }) => {
 
 test("Z adds a zoom that visibly zooms the preview", async ({ page }) => {
   await importFixture(page);
+  await openLeftPanel(page, "Backgrounds");
   await page.getByRole("button", { name: "Paper", exact: true }).click();
   // With padding, the top-left corner is background.
   await expect.poll(() => pixel(page, 0.02, 0.02)).toEqual([250, 250, 250, 255]);
@@ -67,18 +69,23 @@ test("Z adds a zoom that visibly zooms the preview", async ({ page }) => {
   await page.locator("body").press("z");
   await expect(page.getByTestId("timeline-zoom")).toHaveCount(1);
   await expect(page.getByRole("tab", { name: "zoom" })).toHaveAttribute("aria-selected", "true");
+  // While selected and paused, the preview shows the whole frame with the zoom's box to adjust.
+  await expect(page.getByTestId("edit-box")).toBeVisible();
 
-  // Hold point of the zoom: the media now covers the corner.
-  await page.locator("body").press("Shift+ArrowRight");
-  await expect.poll(() => pixel(page, 0.02, 0.02)).not.toEqual([250, 250, 250, 255]);
-
-  // Clicking the preview aims the zoom.
+  // Clicking outside the box re-aims the zoom there.
   const before = await page.getByRole("slider", { name: "Focus horizontal" }).getAttribute("aria-valuenow");
   const canvas = page.getByTestId("preview-canvas");
   const box = (await canvas.boundingBox())!;
-  await canvas.click({ position: { x: box.width * 0.2, y: box.height * 0.5 } });
+  await page.mouse.click(box.x + box.width * 0.15, box.y + box.height * 0.5);
   await expect(page.getByRole("slider", { name: "Focus horizontal" })).not.toHaveAttribute("aria-valuenow", before!);
 
+  // Deselected, at the zoom's hold point, the media covers the corner.
+  await page.locator("body").press("Shift+ArrowRight");
+  await page.locator("body").press("Escape");
+  await expect(page.getByTestId("edit-box")).toHaveCount(0);
+  await expect.poll(() => pixel(page, 0.02, 0.02)).not.toEqual([250, 250, 250, 255]);
+
+  await page.getByTestId("timeline-zoom").click();
   await page.locator("body").press("Delete");
   await expect(page.getByTestId("timeline-zoom")).toHaveCount(0);
   await page.locator("body").press("ControlOrMeta+z");
