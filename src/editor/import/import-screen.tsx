@@ -10,6 +10,7 @@ import { CapabilitiesPanel } from "../capabilities-panel";
 import { useCapabilities } from "../use-capabilities";
 import { markImportStart } from "./import-timing";
 import { ACCEPT_ATTRIBUTE, ImportError, importVideo } from "./import-video";
+import { RecordPanel } from "../record/record-panel";
 import { RecentProjects } from "./recent-projects";
 
 type Status = { kind: "idle" } | { kind: "importing"; name: string } | { kind: "error"; message: string };
@@ -90,6 +91,7 @@ export function ImportScreen() {
           </p>
         )}
       </section>
+      <RecordPanel />
       <RecentProjects />
       {caps && (
         <div className="w-full max-w-2xl">

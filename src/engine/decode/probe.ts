@@ -1,4 +1,4 @@
-import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input } from "mediabunny";
+import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, type InputVideoTrack } from "mediabunny";
 import { secondsToMicros, type Micros } from "../time";
 import { analyzeFrameTimestamps } from "./frame-rate";
 
@@ -26,14 +26,23 @@ export class MediaProbeError extends Error {
 
 const FRAME_RATE_SAMPLE = 240;
 
-/** Reads the metadata the editor needs from a video file, without decoding frames. */
-export async function probeVideo(blob: Blob): Promise<VideoProbe> {
+/** The video track at `index`, or the primary video track when no index is given. */
+export async function pickVideoTrack(input: Input, index?: number): Promise<InputVideoTrack | null> {
+  if (index === undefined) return input.getPrimaryVideoTrack();
+  return (await input.getVideoTracks())[index] ?? null;
+}
+
+/**
+ * Reads the metadata the editor needs from a video file, without decoding frames. `trackIndex` picks a video
+ * track by position (browser recordings keep the webcam in track 1); otherwise the primary track is used.
+ */
+export async function probeVideo(blob: Blob, trackIndex?: number): Promise<VideoProbe> {
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
   try {
     if (!(await input.canRead())) {
       throw new MediaProbeError("unreadable", "This file isn't a video format we can read. Use MP4, MOV or WebM.");
     }
-    const track = await input.getPrimaryVideoTrack();
+    const track = await pickVideoTrack(input, trackIndex);
     if (!track) throw new MediaProbeError("no-video", "This file has no video track.");
 
     const codec = (await track.getCodec()) ?? "unknown";
@@ -65,7 +74,8 @@ export async function probeVideo(blob: Blob): Promise<VideoProbe> {
     }
     const { averageFps, isVariableFrameRate } = analyzeFrameTimestamps(timestamps);
 
-    return { width, height, duration, codec, hasAudio: audioTrack !== null, averageFps, isVariableFrameRate };
+    const hasAudio = audioTrack !== null && (trackIndex === undefined || trackIndex === 0);
+    return { width, height, duration, codec, hasAudio, averageFps, isVariableFrameRate };
   } finally {
     input.dispose();
   }

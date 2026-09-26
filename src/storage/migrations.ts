@@ -1,6 +1,10 @@
 import { CURRENT_SCHEMA_VERSION, projectSchema, type Project } from "@/schema/project";
 
-/** One entry per schema bump: migrations[n] upgrades a version-n project to version n + 1. */
+/**
+ * One entry per schema bump: migrations[n] upgrades a version-n project to version n + 1.
+ * Optional additive fields (such as MediaAsset.videoTrack or VideoTrack.overlay) keep older projects valid
+ * and don't need a bump.
+ */
 const migrations: Record<number, (raw: Record<string, unknown>) => Record<string, unknown>> = {};
 
 export class ProjectMigrationError extends Error {}

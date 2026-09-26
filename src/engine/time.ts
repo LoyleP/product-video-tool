@@ -12,6 +12,12 @@ export function secondsToMicros(seconds: number): Micros {
   return Math.round(seconds * MICROS_PER_SECOND);
 }
 
+/** Converts seconds to integer microseconds, rounding up so the result is never earlier than `seconds`. */
+export function secondsToMicrosCeil(seconds: number): Micros {
+  // Tolerate float noise such as 0.3 * 1e6 = 299999.99999999994; `+ 0` turns -0 into 0.
+  return Math.ceil(seconds * MICROS_PER_SECOND - 1e-6) + 0;
+}
+
 /** Converts microseconds to seconds (UI boundary only). */
 export function microsToSeconds(t: Micros): number {
   return t / MICROS_PER_SECOND;

@@ -60,7 +60,9 @@ describe("project-level timing", () => {
 
   it("lists active clips with their source time", () => {
     const p = project([clip({ sourceIn: 2_000_000, sourceOut: 5_000_000 })]);
-    expect(activeClips(p, 1_000_000)).toEqual([{ clip: p.videoTracks[0]!.clips[0], sourceTime: 3_000_000 }]);
+    expect(activeClips(p, 1_000_000)).toEqual([
+      { clip: p.videoTracks[0]!.clips[0], track: p.videoTracks[0], sourceTime: 3_000_000 },
+    ]);
     expect(activeClips(p, 3_000_000)).toEqual([]);
   });
 });

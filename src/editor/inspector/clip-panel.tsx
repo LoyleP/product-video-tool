@@ -8,7 +8,16 @@ import { clipDuration } from "@/engine/timeline";
 import { formatTime } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/schema/project";
-import { deleteClip, findClip, setClipMuted, setClipSource, setClipSpeed, splitClip } from "@/store/edits";
+import {
+  deleteClip,
+  findClip,
+  setClipMuted,
+  setClipSource,
+  setClipSpeed,
+  setTrackHidden,
+  splitClip,
+  updateOverlay,
+} from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
 import type { Player } from "../preview/player";
@@ -25,7 +34,7 @@ export function ClipPanel({ project, player }: { project: Project; player: Playe
   if (!found) {
     return <p className="text-sm text-muted-foreground">Select a clip in the timeline to change its speed or trim.</p>;
   }
-  const { clip } = found;
+  const { clip, track } = found;
   const asset = project.assets[clip.assetId];
   const speedIndex = SPEEDS.reduce((best, s, i) => (Math.abs(s - clip.speed) < Math.abs(SPEEDS[best]! - clip.speed) ? i : best), 0);
 
@@ -106,6 +115,76 @@ export function ClipPanel({ project, player }: { project: Project; player: Playe
               }
             }}
           />
+        </section>
+      )}
+
+      {track.overlay && (
+        <section className="space-y-3" aria-label="Camera overlay">
+          <Label>Camera overlay</Label>
+          <div role="radiogroup" aria-label="Overlay shape" className="grid grid-cols-2 gap-1">
+            {(["circle", "rounded"] as const).map((shape) => (
+              <button
+                key={shape}
+                type="button"
+                role="radio"
+                aria-checked={track.overlay!.shape === shape}
+                onClick={() => commit((d) => updateOverlay(d, track.id, { shape }))}
+                className={cn(
+                  "rounded-md border px-2 py-1 text-xs capitalize outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  track.overlay!.shape === shape ? "border-foreground/60 bg-muted" : "text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                {shape === "circle" ? "Circle" : "Rounded"}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Size</span>
+            <span className="font-mono tabular-nums">{Math.round(track.overlay.size * 100)}%</span>
+          </div>
+          <Slider
+            thumbLabel="Overlay size"
+            min={10}
+            max={50}
+            step={1}
+            value={[Math.round(track.overlay.size * 100)]}
+            onValueChange={([v]) => v !== undefined && commit((d) => updateOverlay(d, track.id, { size: v / 100 }), { coalesce: `overlay-size-${track.id}` })}
+          />
+          <div role="radiogroup" aria-label="Overlay corner" className="grid grid-cols-2 gap-1">
+            {(["top-left", "top-right", "bottom-left", "bottom-right"] as const).map((corner) => (
+              <button
+                key={corner}
+                type="button"
+                role="radio"
+                aria-checked={track.overlay!.corner === corner}
+                onClick={() => commit((d) => updateOverlay(d, track.id, { corner }))}
+                className={cn(
+                  "rounded-md border px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  track.overlay!.corner === corner ? "border-foreground/60 bg-muted" : "text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                {corner.replace("-", " ")}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={track.overlay.mirror}
+              onClick={() => commit((d) => updateOverlay(d, track.id, { mirror: !track.overlay!.mirror }))}
+            >
+              {track.overlay.mirror ? "Mirrored" : "Not mirrored"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={track.hidden}
+              onClick={() => commit((d) => setTrackHidden(d, track.id, !track.hidden))}
+            >
+              {track.hidden ? "Show camera" : "Hide camera"}
+            </Button>
+          </div>
         </section>
       )}
 

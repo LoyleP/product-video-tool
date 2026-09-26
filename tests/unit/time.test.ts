@@ -7,6 +7,7 @@ import {
   isMicros,
   microsToSeconds,
   secondsToMicros,
+  secondsToMicrosCeil,
 } from "@/engine/time";
 
 describe("time conversions", () => {
@@ -14,6 +15,15 @@ describe("time conversions", () => {
     expect(secondsToMicros(1)).toBe(1_000_000);
     expect(secondsToMicros(0.1 + 0.2)).toBe(300_000);
     expect(isMicros(secondsToMicros(1 / 3))).toBe(true);
+  });
+
+  it("rounds up to a time that is never before the input", () => {
+    // A recording whose video starts at 1/30 s: rounding down would ask for a time before the first frame.
+    const first = 1 / 30;
+    expect(secondsToMicrosCeil(first)).toBe(33_334);
+    expect(microsToSeconds(secondsToMicrosCeil(first))).toBeGreaterThanOrEqual(first);
+    expect(secondsToMicrosCeil(0.3)).toBe(300_000);
+    expect(secondsToMicrosCeil(0)).toBe(0);
   });
 
   it("converts micros back to seconds", () => {

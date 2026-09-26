@@ -10,9 +10,9 @@ import { VideoFrameSource } from "./video-frame-source";
 export class MediaFrameProvider implements FrameProvider {
   private readonly sources = new Map<string, VideoFrameSource>();
 
-  async open(assetId: string, blob: Blob): Promise<void> {
+  async open(assetId: string, blob: Blob, trackIndex?: number): Promise<void> {
     if (this.sources.has(assetId)) return;
-    const source = await VideoFrameSource.open(blob);
+    const source = await VideoFrameSource.open(blob, trackIndex);
     if (this.sources.has(assetId)) source.dispose();
     else this.sources.set(assetId, source);
   }

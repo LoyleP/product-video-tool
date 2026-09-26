@@ -32,6 +32,12 @@ export const mediaAssetSchema = z.object({
   codec: z.string(),
   isVariableFrameRate: z.boolean(),
   interactionEvents: z.array(interactionEventSchema).optional(),
+  /** Index among the file's video tracks; absent means the primary track. Browser recordings put the webcam at 1. */
+  videoTrack: z.number().int().nonnegative().optional(),
+  /** Capture settings read back from getDisplayMedia (BUILD.md 7.5), for browser recordings. */
+  capture: z
+    .object({ cursor: z.string().nullable(), displaySurface: z.string().nullable() })
+    .optional(),
 });
 
 export const clipSchema = z.object({
@@ -44,7 +50,21 @@ export const clipSchema = z.object({
   muted: z.boolean(),
 });
 
-export const videoTrackSchema = z.object({ id: z.string(), clips: z.array(clipSchema), hidden: z.boolean() });
+/** Picture-in-picture placement for overlay tracks such as a webcam, in canvas space (not zoomed). */
+export const overlaySchema = z.object({
+  shape: z.enum(["circle", "rounded"]),
+  /** Height as a fraction of the canvas height. */
+  size: z.number().min(0.05).max(0.6),
+  corner: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]),
+  mirror: z.boolean(),
+});
+
+export const videoTrackSchema = z.object({
+  id: z.string(),
+  clips: z.array(clipSchema),
+  hidden: z.boolean(),
+  overlay: overlaySchema.optional(),
+});
 export const audioTrackSchema = z.object({
   id: z.string(),
   clips: z.array(clipSchema),
@@ -167,6 +187,7 @@ export type InteractionEvent = z.infer<typeof interactionEventSchema>;
 export type MediaAsset = z.infer<typeof mediaAssetSchema>;
 export type Clip = z.infer<typeof clipSchema>;
 export type VideoTrack = z.infer<typeof videoTrackSchema>;
+export type Overlay = z.infer<typeof overlaySchema>;
 export type AudioTrack = z.infer<typeof audioTrackSchema>;
 export type ZoomSegment = z.infer<typeof zoomSegmentSchema>;
 export type TextAnimation = z.infer<typeof textAnimationSchema>;
