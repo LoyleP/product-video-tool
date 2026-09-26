@@ -10,6 +10,11 @@ export interface Camera {
   cy: number;
   /** 0 at rest, 1 fully at a segment's target; drives the zoom background blur. */
   amount: number;
+  /**
+   * Set while moving between two framings. `cameraTransform` clamps each framing to the recording's edges
+   * once, then blends the two results, so the motion is a straight, smooth move.
+   */
+  blend?: { from: Camera; to: Camera; e: number };
 }
 
 export const REST_CAMERA: Camera = { scale: 1, cx: 0.5, cy: 0.5, amount: 0 };
@@ -27,6 +32,7 @@ const mix = (a: Camera, b: Camera, e: number): Camera => ({
   cx: lerp(a.cx, b.cx, e),
   cy: lerp(a.cy, b.cy, e),
   amount: Math.min(1, Math.max(0, lerp(a.amount, b.amount, e))),
+  blend: { from: a, to: b, e },
 });
 
 /**
@@ -76,8 +82,28 @@ export const IDENTITY_TRANSFORM: CameraTransform = { scale: 1, tx: 0, ty: 0 };
  * Canvas transform for a camera: the focus point of the media moves to the canvas center, scaled by the
  * camera scale. The focus is clamped so that, once the scaled media is larger than the canvas, the view
  * never pans past the media edges; while it is smaller, the media stays fully on the canvas.
+ *
+ * While moving between two framings, each end is clamped on its own and the results are blended: the point
+ * the camera looks at travels in a straight line and the scale changes smoothly. Clamping the in-between
+ * states instead makes the clamp boundary slide with the scale and drags the camera sideways before it lands.
  */
 export function cameraTransform(canvas: Size, media: Rect, camera: Camera): CameraTransform {
+  const blend = camera.blend;
+  if (!blend) return restingTransform(canvas, media, camera);
+  const a = restingTransform(canvas, media, blend.from);
+  const b = restingTransform(canvas, media, blend.to);
+  const scale = a.scale + (b.scale - a.scale) * blend.e;
+  // The canvas point at the middle of the screen, for each end.
+  const lookAt = (t: CameraTransform) => ({ x: (canvas.width / 2 - t.tx) / t.scale, y: (canvas.height / 2 - t.ty) / t.scale });
+  const la = lookAt(a);
+  const lb = lookAt(b);
+  const x = la.x + (lb.x - la.x) * blend.e;
+  const y = la.y + (lb.y - la.y) * blend.e;
+  return { scale, tx: canvas.width / 2 - scale * x, ty: canvas.height / 2 - scale * y };
+}
+
+/** The transform for a camera held still, with its focus clamped to the recording. */
+function restingTransform(canvas: Size, media: Rect, camera: Camera): CameraTransform {
   const s = camera.scale;
   const clampAxis = (start: number, length: number, focus: number, viewport: number) => {
     const p = start + focus * length;

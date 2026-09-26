@@ -25,8 +25,8 @@ const zoom = (start: number, end: number, over: Partial<ZoomSegment> = {}): Zoom
   ...over,
 });
 
-const expectCamera = (actual: Camera, expected: Partial<Camera>) => {
-  for (const [key, value] of Object.entries(expected)) expect(actual[key as keyof Camera]).toBeCloseTo(value, 6);
+const expectCamera = (actual: Camera, expected: Partial<Omit<Camera, "blend">>) => {
+  for (const [key, value] of Object.entries(expected)) expect(actual[key as "scale" | "cx" | "cy" | "amount"]).toBeCloseTo(value as number, 6);
 };
 
 describe("resolveCamera", () => {
@@ -136,5 +136,96 @@ describe("cameraTransform", () => {
     expect(p.x).toBeCloseTo(0.4);
     expect(p.y).toBeCloseTo(0.6);
     expect(canvasToMedia({ x: t.scale * media.x + t.tx, y: t.scale * media.y + t.ty }, media, t)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("camera motion path", () => {
+  const canvas = { width: 1920, height: 1080 };
+  const lookAt = (t: { scale: number; tx: number; ty: number }): [number, number] => [
+    (canvas.width / 2 - t.tx) / t.scale,
+    (canvas.height / 2 - t.ty) / t.scale,
+  ];
+
+  /** Distance of each point from the straight line first -> last. */
+  function maxDetour(points: [number, number][]): number {
+    const [ax, ay] = points[0]!;
+    const [bx, by] = points[points.length - 1]!;
+    const length = Math.hypot(bx - ax, by - ay) || 1;
+    return Math.max(...points.map(([x, y]) => Math.abs((bx - ax) * (ay - y) - (ax - x) * (by - ay)) / length));
+  }
+
+  const zoom = (over: Partial<ZoomSegment>): ZoomSegment => ({
+    id: "z",
+    start: 0,
+    end: 4_000_000,
+    scale: 2.2,
+    focus: { x: 0.25, y: 0.78 },
+    easeIn: EASING_PRESETS.spring,
+    easeOut: EASING_PRESETS.spring,
+    origin: "manual",
+    ...over,
+  });
+
+  const path = (zooms: ZoomSegment[], media: ReturnType<typeof mediaRect>, from: number, to: number) => {
+    const points: [number, number][] = [];
+    for (let t = from; t <= to; t += 10_000) points.push(lookAt(cameraTransform(canvas, media, resolveCamera(zooms, t))));
+    return points;
+  };
+
+  // Regression: clamping the camera at every instant of a transition made the clamp boundary slide with the
+  // scale, so the camera swung sideways (up to ~115 px) before landing. Each end is now clamped once and the
+  // move between them is a straight line.
+  for (const [name, w, h, padding] of [
+    ["a wide recording", 3024, 1964, 0.08],
+    ["heavy padding", 3024, 1964, 0.2],
+    ["no padding", 3024, 1964, 0],
+    ["a phone recording", 1179, 2556, 0.08],
+  ] as const) {
+    it(`moves in a straight line into and out of a zoom on ${name}`, () => {
+      const media = mediaRect(canvas, { width: w, height: h }, padding);
+      for (const fx of [0.05, 0.25, 0.5, 0.95]) {
+        for (const fy of [0.05, 0.5, 0.78, 0.95]) {
+          for (const scale of [1.5, 2.2, 3.5]) {
+            const z = [zoom({ scale, focus: { x: fx, y: fy } })];
+            expect(maxDetour(path(z, media, 0, 600_000))).toBeLessThan(1);
+            expect(maxDetour(path(z, media, 3_400_000, 3_999_000))).toBeLessThan(1);
+          }
+        }
+      }
+    });
+  }
+
+  it("never backs up on the way to the target", () => {
+    const media = mediaRect(canvas, { width: 3024, height: 1964 }, 0.08);
+    const points = path([zoom({ focus: { x: 0.2, y: 0.5 } })], media, 0, 600_000);
+    const [fx, fy] = points[points.length - 1]!;
+    let last = Infinity;
+    for (const [x, y] of points) {
+      const d = Math.hypot(x - fx, y - fy);
+      expect(d).toBeLessThanOrEqual(last + 1e-6);
+      last = d;
+    }
+  });
+
+  it("starts and ends each move exactly on the clamped framings", () => {
+    const media = mediaRect(canvas, { width: 3024, height: 1964 }, 0.08);
+    const z = zoom({ scale: 2.2, focus: { x: 0.02, y: 0.97 } });
+    const at = (t: number) => cameraTransform(canvas, media, resolveCamera([z], t));
+    expect(at(0)).toEqual({ scale: 1, tx: 0, ty: 0 });
+    const hold = cameraTransform(canvas, media, { scale: 2.2, cx: 0.02, cy: 0.97, amount: 1 });
+    expect(at(2_000_000)).toEqual(hold);
+    const landed = at(600_000);
+    expect(landed.scale).toBeCloseTo(hold.scale, 6);
+    expect(landed.tx).toBeCloseTo(hold.tx, 3);
+    expect(landed.ty).toBeCloseTo(hold.ty, 3);
+    // The edge clamp still holds at the target: the media's top-left never leaves the canvas corner.
+    expect(hold.scale * media.x + hold.tx).toBeLessThanOrEqual(1e-6);
+  });
+
+  it("pans in a straight line between chained zooms", () => {
+    const media = mediaRect(canvas, { width: 3024, height: 1964 }, 0.08);
+    const a = zoom({ id: "a", start: 0, end: 2_000_000, focus: { x: 0.2, y: 0.2 } });
+    const b = zoom({ id: "b", start: 2_000_000, end: 4_000_000, focus: { x: 0.85, y: 0.8 }, scale: 2.8 });
+    expect(maxDetour(path([a, b], media, 2_000_000, 2_600_000))).toBeLessThan(1);
   });
 });
