@@ -33,7 +33,7 @@ test("suggests one zoom on localized activity and ignores the full-screen change
   await expect(page.getByRole("heading", { name: "Suggested zoom" })).toBeVisible();
 
   // Accept turns it into a real zoom (one undo step).
-  await page.getByRole("button", { name: "Accept", exact: true }).click();
+  await page.getByRole("tabpanel").getByRole("button", { name: "Accept", exact: true }).click();
   await expect(ghosts).toHaveCount(0);
   await expect(page.getByTestId("timeline-zoom")).toHaveCount(1);
   await expect(page.getByRole("tab", { name: "zoom" })).toHaveAttribute("aria-selected", "true");

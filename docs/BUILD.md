@@ -349,6 +349,12 @@ Mode A, motion analysis (works on any video):
 
 Mode B, interaction events (precise, websites only, Phase 10): a companion Chrome extension records the page and logs clicks, focus changes and scrolls with timestamps into `interactionEvents`. Auto zoom then targets real click positions and can render a synthetic, restyled cursor.
 
+### 7.6.1 One-gesture zooms and effects (added during Phase 6)
+
+Manual zooms are the primary path; suggestions are optional. While a zoom, suggestion or effect is selected and playback is paused, the preview shows the frame at rest with the item's box: drag outside it to draw a new box (zooms keep the canvas aspect ratio, so the box is exactly what the zoom shows), drag inside to move, drag a corner to resize, click to recenter. A floating toolbar offers motion in words (Gentle 600 ms spring, Quick 350 ms, Slow 1 s), split and delete. Dragging across the zoom row creates a zoom for that range. A new zoom within 300 ms of the previous one snaps onto it, and chained zooms show a link marker. `ZoomSegment.transition` (optional) stores the transition length.
+
+Effects: `Project.effects` (defaults to empty for older projects) holds spotlight (dim outside a box) and blur (blur inside a box) items in media space, drawn over the recording and under the device frame, following zooms.
+
 ### 7.7 Gestures
 
 Manual placement in Phase 4: user clicks on the preview at the playhead to add a tap, or drags to add a swipe. Rendered as an animated ripple or dot (about 350 ms). Positions are in source space so they follow zoom.
