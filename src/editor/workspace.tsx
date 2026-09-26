@@ -12,7 +12,6 @@ import { loadProject } from "@/storage/projects";
 import { appendVideo } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
-import { useSuggestionsStore } from "@/store/suggestions-store";
 import { BackgroundsRail } from "./backgrounds-rail";
 import { ACCEPT_ATTRIBUTE, ImportError, importAsset } from "./import/import-video";
 import { ClipPanel } from "./inspector/clip-panel";
@@ -21,7 +20,6 @@ import { GesturePanel } from "./inspector/gesture-panel";
 import { TextPanel } from "./inspector/text-panel";
 import { ExportPanel } from "./inspector/export-panel";
 import { StylePanel } from "./inspector/style-panel";
-import { SuggestionPanel } from "./inspector/suggestion-panel";
 import { ZoomPanel } from "./inspector/zoom-panel";
 import { PresetsRail } from "./presets-rail";
 import { PreviewCanvas } from "./preview/preview-canvas";
@@ -72,7 +70,6 @@ const EDIT_LABELS = {
   zoom: "Zoom",
   text: "Text",
   gesture: "Tap",
-  suggestion: "Suggestion",
   effect: "Effect",
 } as const;
 
@@ -105,18 +102,8 @@ function Workspace({ project }: { project: Project }) {
     player?.projectChanged();
   }, [player, timing]);
 
-  // A new project starts with nothing selected and no suggestions.
-  useEffect(() => {
-    useEditorStore.getState().select(null);
-    useSuggestionsStore.getState().reset(project.id);
-  }, [project.id]);
-
-  // Suggestions are positioned for the current clip timing; edits to clips make them stale.
-  const clipTiming = JSON.stringify(project.videoTracks);
-  useEffect(() => {
-    const { suggestions, reset, projectId } = useSuggestionsStore.getState();
-    if (suggestions.length > 0 && projectId === project.id) reset(project.id);
-  }, [clipTiming, project.id]);
+  // A new project starts with nothing selected.
+  useEffect(() => useEditorStore.getState().select(null), [project.id]);
 
   const run = (action: "undo" | "redo") => {
     useProjectStore.getState()[action]();
@@ -201,7 +188,6 @@ function Workspace({ project }: { project: Project }) {
               <>
                 {selection?.kind === "clip" && <ClipPanel project={project} player={player} />}
                 {selection?.kind === "zoom" && <ZoomPanel project={project} player={player} />}
-                {selection?.kind === "suggestion" && <SuggestionPanel />}
                 {selection?.kind === "effect" && <EffectPanel project={project} />}
                 {selection?.kind === "text" && <TextPanel project={project} />}
                 {(selection?.kind === "gesture" || (!selection && gestureTool)) && <GesturePanel project={project} />}

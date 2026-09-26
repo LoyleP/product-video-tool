@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { CheckIcon, ScissorsIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ScissorsIcon, Trash2Icon } from "lucide-react";
 import { MOTION_PRESETS, motionPresetOf, type MotionPreset } from "@/engine/easing";
 import type { Rect } from "@/engine/geometry";
 import { effectBox } from "@/engine/layers/effects";
@@ -13,15 +13,13 @@ import type { Effect, Project } from "@/schema/project";
 import { deleteEffect, deleteZoom, splitZoom, updateEffect, updateZoom } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
-import { useSuggestionsStore } from "@/store/suggestions-store";
-import { acceptSuggestions, dismissSuggestions } from "../suggest/accept";
 import { BoxEditor } from "./box-editor";
 import type { Player } from "./player";
 
 const MOTION_LABELS: Record<MotionPreset, string> = { gentle: "Gentle", quick: "Quick", slow: "Slow" };
 
 /**
- * The box for the selected zoom, suggestion or effect, drawn over the preview at rest, with a floating
+ * The box for the selected zoom or effect, drawn over the preview at rest, with a floating
  * toolbar. `project` is the at-rest project the preview is rendering.
  */
 export function SelectedBox({
@@ -39,9 +37,6 @@ export function SelectedBox({
   const select = useEditorStore((s) => s.select);
   const commit = useProjectStore((s) => s.commit);
   const zooms = useProjectStore((s) => s.project?.zooms);
-  const suggestion = useSuggestionsStore((s) =>
-    selection?.kind === "suggestion" ? s.suggestions.find((x) => x.id === selection.id) : undefined,
-  );
   const session = useRef(0);
 
   // Boxes are placed relative to the recording at rest; at a time with no clip, use the first clip's layout.
@@ -108,32 +103,6 @@ export function SelectedBox({
               }}
             >
               <Trash2Icon className="size-3.5" />
-            </ToolbarButton>
-          </>
-        }
-      />
-    );
-  }
-
-  if (selection.kind === "suggestion") {
-    if (!suggestion) return null;
-    return (
-      <BoxEditor
-        box={toCss(zoomBox(project.canvas, media, suggestion))}
-        aspect={aspect}
-        label={`Suggested zoom ${suggestion.scale}×`}
-        onChange={(box) =>
-          useSuggestionsStore.getState().update(suggestion.id, zoomFromBox(project.canvas, media, toCanvas(box)))
-        }
-        toolbar={
-          <>
-            <span className="px-1.5 text-xs text-muted-foreground">Suggested {suggestion.scale.toFixed(1)}×</span>
-            <ToolbarButton onClick={() => acceptSuggestions([suggestion.id])}>
-              <CheckIcon className="size-3.5" />
-              Accept
-            </ToolbarButton>
-            <ToolbarButton label="Dismiss suggestion" onClick={() => dismissSuggestions([suggestion.id])}>
-              <XIcon className="size-3.5" />
             </ToolbarButton>
           </>
         }

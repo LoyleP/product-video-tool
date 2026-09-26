@@ -54,9 +54,9 @@ export function PreviewCanvas({ project: editedProject, frames, player }: Props)
   const { time, frameVersion, playing } = usePlayerState(player);
   const selection = useEditorStore((s) => s.selection);
   const gestureTool = useEditorStore((s) => s.gestureTool);
-  // While paused with a zoom, suggestion or effect selected, show the frame at rest with its box on top.
+  // While paused with a zoom or effect selected, show the frame at rest with its box on top.
   const editingBox =
-    !playing && !gestureTool && (selection?.kind === "zoom" || selection?.kind === "suggestion" || selection?.kind === "effect");
+    !playing && !gestureTool && (selection?.kind === "zoom" || selection?.kind === "effect");
   const project = useMemo(
     () => (editingBox ? { ...editedProject, zooms: [] } : editedProject),
     [editedProject, editingBox],
