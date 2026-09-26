@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { PlusIcon, VolumeXIcon } from "lucide-react";
+import { Link2Icon, PlusIcon, VolumeXIcon } from "lucide-react";
+import { ZOOM_MERGE_GAP } from "@/engine/camera";
 import { MICROS_PER_SECOND, type Micros } from "@/engine/time";
 import { clipDuration, clipEnd, projectDuration } from "@/engine/timeline";
 import { formatTime } from "@/lib/format-time";
@@ -11,10 +12,13 @@ import { GESTURE_DURATION } from "@/engine/layers/gestures";
 import {
   addText,
   addZoom,
+  addZoomRange,
   moveClip,
+  moveEffect,
   moveText,
   moveZoom,
   trimClipEdge,
+  updateEffect,
   updateGesture,
   updateText,
   updateZoom,
@@ -146,6 +150,7 @@ export function Timeline({ project, player }: { project: Project; player: Player
       for (const l of track.layers) if (l.id !== excludeId) points.push(l.start, l.end);
     }
     for (const g of project.gestures) if (g.id !== excludeId) points.push(g.time);
+    for (const fx of project.effects) if (fx.id !== excludeId) points.push(fx.start, fx.end);
     return points;
   };
   const threshold = toTime(SNAP_PX);
@@ -177,6 +182,46 @@ export function Timeline({ project, player }: { project: Project; player: Player
     el.addEventListener("pointerup", up);
   };
 
+  const [rangeDraft, setRangeDraft] = useState<{ from: number; to: number } | null>(null);
+
+  /** On the zoom row: dragging across empty space creates a zoom for that range; a click moves the playhead. */
+  const rangeOrScrub = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!player || e.button !== 0) return;
+    const el = e.currentTarget;
+    const left = el.getBoundingClientRect().left;
+    const startX = Math.max(0, e.clientX - left);
+    el.setPointerCapture(e.pointerId);
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      const x = Math.max(0, ev.clientX - left);
+      if (!moved && Math.abs(x - startX) < DRAG_THRESHOLD_PX) return;
+      moved = true;
+      setRangeDraft({ from: Math.min(startX, x), to: Math.max(startX, x) });
+    };
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      setRangeDraft(null);
+      if (!moved) {
+        player.seek(toTime(startX));
+        return;
+      }
+      const points = snapPoints("");
+      const from = snap(toTime(startX), points, threshold).t;
+      const to = snap(toTime(Math.max(0, ev.clientX - left)), points, threshold).t;
+      const id = crypto.randomUUID();
+      if (commit((d) => addZoomRange(d, from, to, id, duration) !== null)) {
+        player.pause();
+        player.seek(Math.min(from, to) + Math.abs(to - from) / 2);
+        select({ kind: "zoom", id });
+      }
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+
+  const sortedZooms = [...project.zooms].sort((a, b) => a.start - b.start);
+
   const addZoomAt = (t: Micros) => {
     const id = crypto.randomUUID();
     let added = false;
@@ -197,7 +242,9 @@ export function Timeline({ project, player }: { project: Project; player: Player
     <div className="flex h-full min-h-0 flex-col" data-testid="timeline">
       <div className="flex shrink-0 items-center justify-end gap-1 px-3 py-1">
         <SuggestControls project={project} />
-        <span className="mr-auto pl-2 text-xs text-muted-foreground">Drag to move, drag edges to trim. Ctrl or ⌘ + scroll to zoom.</span>
+        <span className="mr-auto pl-2 text-xs text-muted-foreground">
+          Drag to move, drag edges to trim. Ctrl or ⌘ + scroll to zoom.
+        </span>
         <TimelineButton label="Zoom timeline out" onClick={() => setPps(pps / 1.5)}>
           −
         </TimelineButton>
@@ -305,10 +352,32 @@ export function Timeline({ project, player }: { project: Project; player: Player
             }
           >
             <div
-              className="absolute inset-0"
-              onPointerDown={scrubFrom}
-              onDoubleClick={(e) => addZoomAt(toTime(e.clientX - e.currentTarget.getBoundingClientRect().left))}
+              className="absolute inset-0 cursor-cell"
+              title="Drag to add a zoom for that time range"
+              data-testid="zoom-row-area"
+              onPointerDown={rangeOrScrub}
             />
+            {rangeDraft && (
+              <div
+                className="pointer-events-none absolute top-1 bottom-1 rounded-md border border-dashed border-violet-300 bg-violet-500/20"
+                style={{ left: rangeDraft.from, width: rangeDraft.to - rangeDraft.from }}
+              />
+            )}
+            {sortedZooms.slice(1).map((zoom, i) => {
+              const prev = sortedZooms[i]!;
+              if (zoom.start - prev.end >= ZOOM_MERGE_GAP) return null;
+              return (
+                <span
+                  key={`chain-${zoom.id}`}
+                  className="pointer-events-none absolute top-1/2 z-10 flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-violet-400 text-background"
+                  style={{ left: toPx(prev.end + (zoom.start - prev.end) / 2) }}
+                  title="The camera pans between these zooms"
+                  data-testid="zoom-chain"
+                >
+                  <Link2Icon className="size-2.5" aria-label="Pans to the next zoom" />
+                </span>
+              );
+            })}
             {suggestions.map((s) => {
               const selected = selection?.kind === "suggestion" && selection.id === s.id;
               return (
@@ -388,6 +457,60 @@ export function Timeline({ project, player }: { project: Project; player: Player
                 </Block>
               );
             })}
+          </Row>
+
+          <Row label="Effects">
+            <div className="absolute inset-0" onPointerDown={scrubFrom} />
+            {project.effects.map((effect) => (
+              <Block
+                key={effect.id}
+                left={toPx(effect.start)}
+                width={Math.max(4, toPx(effect.end - effect.start))}
+                selected={selection?.kind === "effect" && selection.id === effect.id}
+                className={
+                  effect.type === "spotlight"
+                    ? "bg-yellow-500/25 ring-yellow-400/60"
+                    : "bg-slate-400/25 ring-slate-300/60"
+                }
+                label={`${effect.type === "spotlight" ? "Spotlight" : "Blur"}, ${formatTime(effect.start)} to ${formatTime(effect.end)}`}
+                testId="timeline-effect"
+                onSelect={() => select({ kind: "effect", id: effect.id })}
+                onBody={(e) => {
+                  const key = `move-effect-${++dragSessions}`;
+                  const origin = effect.start;
+                  const length = effect.end - effect.start;
+                  const points = snapPoints(effect.id);
+                  beginDrag(e, {
+                    onClick: () => select({ kind: "effect", id: effect.id }),
+                    onMove: (dx) => {
+                      const raw = origin + toTime(dx);
+                      const a = snap(raw, points, threshold);
+                      const b = snap(raw + length, points, threshold);
+                      select({ kind: "effect", id: effect.id });
+                      commit((d) => moveEffect(d, effect.id, a.distance <= b.distance ? a.t : b.t - length), {
+                        coalesce: key,
+                      });
+                    },
+                  });
+                }}
+                onEdge={(edge, e) => {
+                  const key = `trim-effect-${++dragSessions}`;
+                  const origin = edge === "start" ? effect.start : effect.end;
+                  const points = snapPoints(effect.id);
+                  beginDrag(e, {
+                    onMove: (dx) => {
+                      const t = snap(origin + toTime(dx), points, threshold).t;
+                      select({ kind: "effect", id: effect.id });
+                      commit((d) => updateEffect(d, effect.id, edge === "start" ? { start: t } : { end: t }), {
+                        coalesce: key,
+                      });
+                    },
+                  });
+                }}
+              >
+                <span className="truncate">{effect.type === "spotlight" ? "Spotlight" : "Blur"}</span>
+              </Block>
+            ))}
           </Row>
 
           {textTracks.map((track, index) => (

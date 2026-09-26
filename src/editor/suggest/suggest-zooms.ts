@@ -1,7 +1,7 @@
 import { analyzeMotion } from "@/engine/analysis/motion-client";
 import { proposeZooms } from "@/engine/analysis/proposals";
 import { ANALYSIS_INTERVAL } from "@/engine/analysis/settings";
-import { EASING_PRESETS } from "@/engine/easing";
+import { MOTION_PRESETS } from "@/engine/easing";
 import type { Micros } from "@/engine/time";
 import { clipEnd } from "@/engine/timeline";
 import type { Clip, Project, ZoomSegment } from "@/schema/project";
@@ -52,8 +52,9 @@ export function suggestionToZoom(s: ZoomSuggestion, id: string = s.id): ZoomSegm
     end: s.end,
     scale: s.scale,
     focus: s.focus,
-    easeIn: EASING_PRESETS.spring,
-    easeOut: EASING_PRESETS.spring,
+    easeIn: MOTION_PRESETS.gentle.easing,
+    easeOut: MOTION_PRESETS.gentle.easing,
     origin: "auto",
+    transition: MOTION_PRESETS.gentle.transition,
   };
 }

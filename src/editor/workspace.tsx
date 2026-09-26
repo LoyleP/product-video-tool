@@ -16,6 +16,7 @@ import { useSuggestionsStore } from "@/store/suggestions-store";
 import { BackgroundsRail } from "./backgrounds-rail";
 import { ACCEPT_ATTRIBUTE, ImportError, importAsset } from "./import/import-video";
 import { ClipPanel } from "./inspector/clip-panel";
+import { EffectPanel } from "./inspector/effect-panel";
 import { GesturePanel } from "./inspector/gesture-panel";
 import { TextPanel } from "./inspector/text-panel";
 import { ExportPanel } from "./inspector/export-panel";
@@ -24,6 +25,7 @@ import { SuggestionPanel } from "./inspector/suggestion-panel";
 import { ZoomPanel } from "./inspector/zoom-panel";
 import { PresetsRail } from "./presets-rail";
 import { PreviewCanvas } from "./preview/preview-canvas";
+import { ToolBar } from "./preview/tool-bar";
 import { usePlayer } from "./preview/use-player";
 import { Timeline } from "./timeline/timeline";
 import { Transport } from "./timeline/transport";
@@ -65,7 +67,14 @@ export function EditorWorkspace({ projectId }: { projectId: string }) {
 }
 
 type InspectorTab = "style" | "edit" | "export";
-const EDIT_LABELS = { clip: "Clip", zoom: "Zoom", text: "Text", gesture: "Tap", suggestion: "Suggestion" } as const;
+const EDIT_LABELS = {
+  clip: "Clip",
+  zoom: "Zoom",
+  text: "Text",
+  gesture: "Tap",
+  suggestion: "Suggestion",
+  effect: "Effect",
+} as const;
 
 function Workspace({ project }: { project: Project }) {
   const { player, frames, error } = usePlayer(project);
@@ -147,7 +156,8 @@ function Workspace({ project }: { project: Project }) {
           <BackgroundsRail />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
-          <section aria-label="Preview" className="relative flex min-h-0 flex-1 p-6">
+          <section aria-label="Preview" className="relative flex min-h-0 flex-1 flex-col items-center gap-3 p-6 pt-3">
+            <ToolBar project={project} player={player} />
             <PreviewCanvas project={project} frames={frames} player={player} />
             {error && (
               <p
@@ -190,8 +200,9 @@ function Workspace({ project }: { project: Project }) {
             {tab === "edit" && (
               <>
                 {selection?.kind === "clip" && <ClipPanel project={project} player={player} />}
-                {selection?.kind === "zoom" && <ZoomPanel project={project} />}
+                {selection?.kind === "zoom" && <ZoomPanel project={project} player={player} />}
                 {selection?.kind === "suggestion" && <SuggestionPanel />}
+                {selection?.kind === "effect" && <EffectPanel project={project} />}
                 {selection?.kind === "text" && <TextPanel project={project} />}
                 {(selection?.kind === "gesture" || (!selection && gestureTool)) && <GesturePanel project={project} />}
                 {!selection && !gestureTool && <EditHelp />}
@@ -208,7 +219,11 @@ function Workspace({ project }: { project: Project }) {
 function EditHelp() {
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
-      <p>Select something in the timeline to edit it, or add:</p>
+      <p>
+        Use the bar above the preview to add a zoom, spotlight, blur or text at the playhead, then draw its box on the
+        preview. Or select something in the timeline to edit it.
+      </p>
+      <p>Shortcuts:</p>
       <ul className="space-y-1.5">
         <li>
           <kbd className="rounded border px-1 font-mono text-xs">Z</kbd> a zoom at the playhead

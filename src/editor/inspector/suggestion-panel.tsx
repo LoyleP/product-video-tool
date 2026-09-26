@@ -25,7 +25,8 @@ export function SuggestionPanel() {
           {formatTime(suggestion.start)} – {formatTime(suggestion.end)}
         </p>
         <p className="text-xs text-muted-foreground">
-          Found from motion in the video. The preview shows it while selected; click the preview to re-aim it.
+          Found from motion in the video. Adjust its box on the preview, then accept or dismiss it. Press play to see it
+          in motion.
         </p>
       </section>
       <section className="space-y-3">

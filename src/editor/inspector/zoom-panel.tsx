@@ -1,25 +1,21 @@
 "use client";
 
-import { Trash2Icon } from "lucide-react";
+import { ScissorsIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { EASING_PRESETS, easingPresetOf, type EasingPreset } from "@/engine/easing";
+import { MOTION_PRESETS, motionPresetOf, type MotionPreset } from "@/engine/easing";
 import { formatTime } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/schema/project";
-import { deleteZoom, updateZoom } from "@/store/edits";
+import { deleteZoom, splitZoom, updateZoom } from "@/store/edits";
 import { useEditorStore } from "@/store/editor-store";
 import { useProjectStore } from "@/store/project-store";
+import type { Player } from "../preview/player";
 
-const PRESET_LABELS: Record<EasingPreset, string> = {
-  spring: "Spring",
-  smooth: "Smooth",
-  snappy: "Snappy",
-  linear: "Linear",
-};
+const MOTION_LABELS: Record<MotionPreset, string> = { gentle: "Gentle", quick: "Quick", slow: "Slow" };
 
-export function ZoomPanel({ project }: { project: Project }) {
+export function ZoomPanel({ project, player }: { project: Project; player: Player | null }) {
   const selection = useEditorStore((s) => s.selection);
   const select = useEditorStore((s) => s.select);
   const commit = useProjectStore((s) => s.commit);
@@ -33,7 +29,7 @@ export function ZoomPanel({ project }: { project: Project }) {
     );
   }
 
-  const easing = easingPresetOf(zoom.easeIn) ?? "spring";
+  const motion = motionPresetOf(zoom);
   const set = (patch: Parameters<typeof updateZoom>[2], key?: string) =>
     commit((d) => updateZoom(d, zoom.id, patch), key ? { coalesce: `${key}-${zoom.id}` } : undefined);
 
@@ -63,7 +59,7 @@ export function ZoomPanel({ project }: { project: Project }) {
 
       <section className="space-y-3">
         <Label>Focus</Label>
-        <p className="text-xs text-muted-foreground">Click the preview to aim the zoom, or fine-tune below.</p>
+        <p className="text-xs text-muted-foreground">Draw or drag the box on the preview, or fine-tune below.</p>
         {(["x", "y"] as const).map((axis) => (
           <div key={axis} className="space-y-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -76,7 +72,9 @@ export function ZoomPanel({ project }: { project: Project }) {
               max={100}
               step={1}
               value={[Math.round(zoom.focus[axis] * 100)]}
-              onValueChange={([v]) => v !== undefined && set({ focus: { ...zoom.focus, [axis]: v / 100 } }, `focus-${axis}`)}
+              onValueChange={([v]) =>
+                v !== undefined && set({ focus: { ...zoom.focus, [axis]: v / 100 } }, `focus-${axis}`)
+              }
             />
           </div>
         ))}
@@ -84,24 +82,41 @@ export function ZoomPanel({ project }: { project: Project }) {
 
       <section className="space-y-3">
         <Label>Motion</Label>
-        <div role="radiogroup" aria-label="Zoom motion" className="grid grid-cols-2 gap-1">
-          {(Object.keys(EASING_PRESETS) as EasingPreset[]).map((preset) => (
+        <div role="radiogroup" aria-label="Zoom motion" className="grid grid-cols-3 gap-1">
+          {(Object.keys(MOTION_PRESETS) as MotionPreset[]).map((preset) => (
             <button
               key={preset}
               type="button"
               role="radio"
-              aria-checked={easing === preset}
-              onClick={() => set({ easeIn: EASING_PRESETS[preset], easeOut: EASING_PRESETS[preset] })}
+              aria-checked={motion === preset}
+              onClick={() =>
+                set({
+                  easeIn: MOTION_PRESETS[preset].easing,
+                  easeOut: MOTION_PRESETS[preset].easing,
+                  transition: MOTION_PRESETS[preset].transition,
+                })
+              }
               className={cn(
                 "rounded-md border px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                easing === preset ? "border-foreground/60 bg-muted" : "text-muted-foreground hover:bg-muted/50",
+                motion === preset ? "border-foreground/60 bg-muted" : "text-muted-foreground hover:bg-muted/50",
               )}
             >
-              {PRESET_LABELS[preset]}
+              {MOTION_LABELS[preset]}
             </button>
           ))}
         </div>
+        {motion === null && <p className="text-xs text-muted-foreground">Custom motion.</p>}
       </section>
+
+      <Button
+        variant="outline"
+        size="sm"
+        aria-keyshortcuts="S"
+        onClick={() => commit((d) => splitZoom(d, zoom.id, player?.getState().time ?? zoom.start, crypto.randomUUID()))}
+      >
+        <ScissorsIcon />
+        Split at playhead
+      </Button>
 
       <Button
         variant="outline"
