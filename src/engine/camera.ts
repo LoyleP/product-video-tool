@@ -14,7 +14,7 @@ export interface Camera {
 
 export const REST_CAMERA: Camera = { scale: 1, cx: 0.5, cy: 0.5, amount: 0 };
 
-/** Default zoom in and out transition length (BUILD.md 7.3). */
+/** Default zoom in and out transition length (BUILD.md 7.3); a segment's `transition` overrides it. */
 export const ZOOM_TRANSITION: Micros = 600_000;
 /** Segments closer than this move directly from one target to the next. */
 export const ZOOM_MERGE_GAP: Micros = 300_000;
@@ -45,8 +45,9 @@ export function resolveCamera(zooms: readonly ZoomSegment[], t: Micros): Camera 
 
     if (t >= seg.start && t < seg.end) {
       const length = seg.end - seg.start;
-      const inDuration = Math.min(ZOOM_TRANSITION, chainedToNext ? length : length / 2);
-      const outDuration = chainedToNext ? 0 : Math.min(ZOOM_TRANSITION, length / 2);
+      const transition = seg.transition ?? ZOOM_TRANSITION;
+      const inDuration = Math.min(transition, chainedToNext ? length : length / 2);
+      const outDuration = chainedToNext ? 0 : Math.min(transition, length / 2);
       const target = targetOf(seg);
       const from = chainedFromPrev ? targetOf(prev!) : REST_CAMERA;
       if (t < seg.start + inDuration) {

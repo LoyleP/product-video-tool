@@ -81,6 +81,20 @@ export const zoomSegmentSchema = z.object({
   easeIn: easingSchema,
   easeOut: easingSchema,
   origin: z.enum(["manual", "auto"]),
+  /** Length of the zoom in and out transitions; defaults to 600 ms (BUILD.md 7.3). */
+  transition: micros.positive().optional(),
+});
+
+/** A box effect in media space, following zooms: dim everything else (spotlight) or blur the box. */
+export const effectSchema = z.object({
+  id: z.string(),
+  type: z.enum(["spotlight", "blur"]),
+  start: micros,
+  end: micros,
+  /** Normalized to the recording (0..1), like zoom focus. */
+  rect: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }),
+  /** 0..1: how dark the spotlight dims, or how strong the blur is. */
+  intensity: z.number().min(0).max(1),
 });
 
 export const textAnimationSchema = z.object({
@@ -177,6 +191,8 @@ export const projectSchema = z.object({
   textTracks: z.array(textTrackSchema).max(5),
   zooms: z.array(zoomSegmentSchema),
   gestures: z.array(gestureSchema),
+  /** Spotlight and blur boxes. Added after schema v1 shipped, so older projects default to none. */
+  effects: z.array(effectSchema).default([]),
   captions: captionTrackSchema.nullable(),
   style: compositionStyleSchema,
   export: exportSettingsSchema,
@@ -194,6 +210,7 @@ export type TextAnimation = z.infer<typeof textAnimationSchema>;
 export type TextLayer = z.infer<typeof textLayerSchema>;
 export type TextTrack = z.infer<typeof textTrackSchema>;
 export type Gesture = z.infer<typeof gestureSchema>;
+export type Effect = z.infer<typeof effectSchema>;
 export type CaptionTrack = z.infer<typeof captionTrackSchema>;
 export type Background = z.infer<typeof backgroundSchema>;
 export type CompositionStyle = z.infer<typeof compositionStyleSchema>;

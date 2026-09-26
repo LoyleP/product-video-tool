@@ -10,6 +10,7 @@ import { coverRect, deviceById } from "./devices";
 import type { FrameProvider, RenderTarget } from "./frame-provider";
 import { mediaRect, type Rect } from "./geometry";
 import { drawBackground } from "./layers/background";
+import { drawEffects } from "./layers/effects";
 import { drawGestures } from "./layers/gestures";
 import { drawMedia, type MediaPlacement, type Radii } from "./layers/media";
 import { drawOverlay, placeOverlay, type OverlayPlacement } from "./layers/overlay";
@@ -95,9 +96,12 @@ export function renderFrame(target: RenderTarget, project: Project, t: Micros, f
   ctx.save();
   ctx.transform(transform.scale, 0, 0, transform.scale, transform.tx, transform.ty);
   const pixelScale = scale * transform.scale;
-  for (const placement of layout.media) {
-    drawMedia(ctx, frames.getFrame(placement.assetId, placement.sourceTime), placement, project.style, pixelScale);
-  }
+  layout.media.forEach((placement, index) => {
+    const frame = frames.getFrame(placement.assetId, placement.sourceTime);
+    // Effects belong to the main recording, like zoom focus.
+    const effects = index === 0 && project.effects.length > 0 ? () => drawEffects(ctx, project.effects, t, placement, frame, pixelScale) : undefined;
+    drawMedia(ctx, frame, placement, project.style, pixelScale, effects);
+  });
   if (layout.primaryRect) drawGestures(ctx, project.gestures, t, layout.primaryRect, pixelScale);
   ctx.restore();
 
